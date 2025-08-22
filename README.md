@@ -252,11 +252,7 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙋‍♂️ Support
 
-- Create an issue for bug reports or feature requests
-- Join our [Discord community](https://discord.gg/going-bananas)
-- Email us at support@goingbananas.dev
 
 ---
 
