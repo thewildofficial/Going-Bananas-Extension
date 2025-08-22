@@ -1,0 +1,37 @@
+{
+  "sampleAnalyses": [
+    {
+      "risk_score": 7.2,
+      "risk_level": "medium",
+      "summary": "This service has some concerning data collection practices and liability limitations.",
+      "key_points": [
+        "Personal data may be shared with third parties",
+        "Limited liability protection for users",
+        "Account termination without notice possible"
+      ],
+      "categories": {
+        "privacy": {
+          "score": 8.1,
+          "concerns": ["Extensive data collection", "Third-party sharing"]
+        },
+        "liability": {
+          "score": 6.5,
+          "concerns": ["Limited company liability"]
+        },
+        "termination": {
+          "score": 7.0,
+          "concerns": ["Immediate termination clause"]
+        },
+        "payment": {
+          "score": 4.0,
+          "concerns": ["Standard payment terms"]
+        }
+      },
+      "confidence": 0.89
+    }
+  ],
+  "testTexts": [
+    "Terms of Service: By using our service, you agree to data collection and sharing with partners.",
+    "Privacy Policy: We collect personal information and may share it with third parties for marketing purposes."
+  ]
+}

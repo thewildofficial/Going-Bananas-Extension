@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Going Bananas T&C Analyzer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="banana-icon">🍌</span>
+        <h1>Going Bananas</h1>
+      </div>
+      <button class="settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+    </header>
+
+    <!-- Loading State -->
+    <div class="loading-state" id="loadingState">
+      <div class="spinner"></div>
+      <p>Analyzing terms and conditions...</p>
+    </div>
+
+    <!-- No T&C Found State -->
+    <div class="no-tc-state" id="noTcState" style="display: none;">
+      <div class="empty-icon">📄</div>
+      <h3>No Terms Found</h3>
+      <p>We couldn't detect any terms and conditions on this page.</p>
+      <button class="scan-btn" id="scanBtn">Scan Manually</button>
+    </div>
+
+    <!-- Analysis Results -->
+    <div class="results-container" id="resultsContainer" style="display: none;">
+      <!-- Risk Score Header -->
+      <div class="risk-header">
+        <div class="risk-score" id="riskScore">
+          <div class="score-circle" id="scoreCircle">
+            <span class="score-number" id="scoreNumber">7.2</span>
+          </div>
+          <div class="risk-info">
+            <h2 class="risk-level" id="riskLevel">Medium Risk</h2>
+            <p class="risk-description" id="riskDescription">Some concerning clauses found</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Section -->
+      <div class="summary-section">
+        <h3>Quick Summary</h3>
+        <p class="summary-text" id="summaryText">
+          This service collects your personal data and may share it with third parties. 
+          You waive certain legal rights and the company can terminate your account at any time.
+        </p>
+      </div>
+
+      <!-- Key Points -->
+      <div class="key-points-section">
+        <h3>Key Concerns</h3>
+        <ul class="key-points-list" id="keyPointsList">
+          <li class="key-point high-risk">
+            <span class="point-icon">🔴</span>
+            <span class="point-text">Your data may be shared with third parties for marketing</span>
+          </li>
+          <li class="key-point medium-risk">
+            <span class="point-icon">🟡</span>
+            <span class="point-text">Service can be terminated without prior notice</span>
+          </li>
+          <li class="key-point low-risk">
+            <span class="point-icon">🟢</span>
+            <span class="point-text">You can delete your account and data at any time</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Categories Breakdown -->
+      <div class="categories-section">
+        <h3>Detailed Analysis</h3>
+        <div class="category-item">
+          <div class="category-header">
+            <span class="category-icon">🔒</span>
+            <span class="category-name">Privacy</span>
+            <span class="category-score high">8.1</span>
+          </div>
+          <div class="category-details">
+            <p>Extensive data collection including location and browsing habits</p>
+          </div>
+        </div>
+        <div class="category-item">
+          <div class="category-header">
+            <span class="category-icon">⚖️</span>
+            <span class="category-name">Liability</span>
+            <span class="category-score medium">6.3</span>
+          </div>
+          <div class="category-details">
+            <p>Limited liability protection with some user responsibility clauses</p>
+          </div>
+        </div>
+        <div class="category-item">
+          <div class="category-header">
+            <span class="category-icon">🚪</span>
+            <span class="category-name">Termination</span>
+            <span class="category-score low">4.2</span>
+          </div>
+          <div class="category-details">
+            <p>Clear termination process with reasonable notice period</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button class="btn-secondary" id="viewFullBtn">View Full Analysis</button>
+        <button class="btn-primary" id="shareBtn">Share Results</button>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div class="error-state" id="errorState" style="display: none;">
+      <div class="error-icon">⚠️</div>
+      <h3>Analysis Failed</h3>
+      <p class="error-message" id="errorMessage">Unable to analyze terms and conditions</p>
+      <button class="retry-btn" id="retryBtn">Try Again</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
