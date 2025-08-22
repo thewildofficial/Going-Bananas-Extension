@@ -10,14 +10,16 @@ A Chrome browser extension that uses Google Gemini AI to automatically parse, an
 - **Key Points Extraction**: Highlights the most important clauses you need to know
 - **Privacy Concerns**: Identifies data collection and privacy-related terms
 - **One-Click Insights**: See everything at a glance without reading pages of legal text
+- **Modern React UI**: Beautiful, responsive interface built with React and TypeScript
+- **Type Safety**: Full TypeScript coverage for reliable, maintainable code
 
 ## 🏗️ Architecture
 
 ### Frontend (Browser Extension)
-- **Popup Interface**: Main extension UI for viewing analysis results
-- **Content Script**: Automatically detects T&C pages and extracts text
-- **Options Page**: Configure API settings and preferences
-- **Background Service**: Handles API communication and data management
+- **React Popup Interface**: Modern, responsive UI built with React and TypeScript
+- **TypeScript Content Script**: Automatically detects T&C pages and extracts text
+- **React Options Page**: Feature-rich settings interface with real-time validation
+- **Background Service Worker**: Handles API communication and data management
 
 ### Backend API
 - **Express.js Server**: RESTful API for T&C analysis
@@ -36,25 +38,35 @@ User Interface ← Risk Analysis ← Processed Results ← AI Response
 
 ```
 Going-Bananas-Extension/
-├── extension/                 # Chrome extension files
-│   ├── manifest.json         # Extension configuration
-│   ├── popup/               # Main extension popup
-│   │   ├── popup.html
-│   │   ├── popup.js
-│   │   └── popup.css
-│   ├── content/             # Content scripts
-│   │   ├── content.js
-│   │   └── content.css
-│   ├── background/          # Background service worker
-│   │   └── background.js
-│   ├── options/             # Settings page
-│   │   ├── options.html
-│   │   ├── options.js
-│   │   └── options.css
-│   └── assets/              # Icons and images
-│       ├── icon16.png
-│       ├── icon48.png
-│       └── icon128.png
+├── extension/                 # Chrome extension (React + TypeScript)
+│   ├── src/                  # TypeScript source code
+│   │   ├── popup/           # React popup component
+│   │   │   ├── Popup.tsx    # Main popup UI
+│   │   │   ├── popup.html   # HTML template
+│   │   │   └── index.tsx    # Entry point
+│   │   ├── options/         # React options page
+│   │   │   ├── Options.tsx  # Settings UI
+│   │   │   ├── options.html # HTML template
+│   │   │   └── index.tsx    # Entry point
+│   │   ├── content/         # TypeScript content script
+│   │   │   └── index.ts     # Page interaction logic
+│   │   ├── background/      # TypeScript service worker
+│   │   │   └── index.ts     # Background service
+│   │   ├── components/      # Reusable React components
+│   │   │   ├── RiskScore.tsx # Risk display component
+│   │   │   └── KeyPoints.tsx # Key points list
+│   │   ├── hooks/           # Custom React hooks
+│   │   │   └── useAnalysis.ts # Analysis state management
+│   │   ├── types/           # TypeScript type definitions
+│   │   │   └── index.ts     # Shared interfaces
+│   │   ├── utils/           # Utility functions
+│   │   │   └── chrome.ts    # Chrome API helpers
+│   │   ├── assets/          # Icons and images
+│   │   └── manifest.json    # Extension configuration
+│   ├── dist/                # Built extension (generated)
+│   ├── package.json         # Dependencies & scripts
+│   ├── tsconfig.json        # TypeScript config
+│   └── webpack.config.js    # Build configuration
 ├── backend/                 # Express.js API server
 │   ├── server.js           # Main server file
 │   ├── routes/             # API routes
@@ -76,23 +88,22 @@ Going-Bananas-Extension/
 │   ├── mockServer.js
 │   ├── mockData.json
 │   └── package.json
-├── docs/                   # Documentation
-│   ├── API.md
-│   ├── DEVELOPMENT.md
-│   └── DEPLOYMENT.md
 └── scripts/                # Build and utility scripts
-    ├── build.sh
-    ├── dev.sh
+    ├── build.sh            # Build all components
+    ├── dev.sh              # Start vanilla JS development
+    ├── dev-react.sh        # Start React + TypeScript development
     └── package.sh
 ```
 
 ## 🛠️ Technology Stack
 
-### Frontend
-- **Vanilla JavaScript**: Lightweight extension code
+### Frontend (Browser Extension)
+- **React 18**: Modern UI framework with functional components
+- **TypeScript**: Type-safe development with strict typing
+- **Tailwind CSS**: Utility-first CSS framework for styling
+- **Webpack 5**: Module bundler with hot reload support
 - **Chrome Extensions API**: Manifest V3 for modern browser compatibility
-- **CSS3**: Modern styling with flexbox and grid
-- **HTML5**: Semantic markup for accessibility
+- **Lucide React**: Beautiful icon library
 
 ### Backend
 - **Node.js**: Runtime environment
@@ -103,8 +114,9 @@ Going-Bananas-Extension/
 - **Helmet**: Security middleware
 
 ### Development Tools
-- **ESLint**: Code linting and formatting
-- **Prettier**: Code formatting
+- **TypeScript Compiler**: Static type checking
+- **ESLint**: Code linting with TypeScript support
+- **Webpack Dev Server**: Hot reload for development
 - **Jest**: Testing framework
 - **Nodemon**: Development server with hot reload
 
@@ -123,40 +135,40 @@ Going-Bananas-Extension/
    cd Going-Bananas-Extension
    ```
 
-2. **Install backend dependencies**
+2. **Install all dependencies**
+   ```bash
+   # Install extension dependencies (React + TypeScript)
+   cd extension && npm install
+
+   # Install backend dependencies
+   cd ../backend && npm install
+
+   # Install mock API dependencies
+   cd ../mock-api && npm install
+   ```
+
+3. **Set up environment variables**
    ```bash
    cd backend
-   npm install
-   ```
-
-3. **Install mock API dependencies**
-   ```bash
-   cd ../mock-api
-   npm install
-   ```
-
-4. **Set up environment variables**
-   ```bash
-   cd ../backend
-   cp .env.example .env
+   cp env.example .env
    # Edit .env with your Gemini API key
    ```
 
-5. **Start the development servers**
+4. **Start development environment**
    ```bash
-   # Terminal 1: Backend API
-   cd backend
-   npm run dev
+   # Option 1: Start React + TypeScript development (recommended)
+   ./scripts/dev-react.sh
 
-   # Terminal 2: Mock API (for testing)
-   cd mock-api
-   npm start
+   # Option 2: Start vanilla JavaScript development
+   ./scripts/dev.sh
    ```
 
-6. **Load the extension in Chrome**
+5. **Load the extension in Chrome**
    - Open Chrome and go to `chrome://extensions/`
    - Enable "Developer mode"
-   - Click "Load unpacked" and select the `extension/` folder
+   - Click "Load unpacked" and select:
+     - `extension/dist/` folder (for React + TypeScript)
+     - `extension/` folder (for vanilla JavaScript)
 
 ## 🧪 How It Works
 
@@ -235,14 +247,27 @@ Analyzes terms and conditions text
 
 ## 📈 Development Roadmap
 
+### ✅ Completed
 - [x] Basic T&C detection and parsing
 - [x] Gemini AI integration for analysis
 - [x] Risk scoring algorithm
+- [x] React + TypeScript frontend
+- [x] Modern component architecture
+- [x] Type-safe Chrome API integration
+- [x] Webpack build system
+
+### 🚧 In Progress
 - [ ] Multi-language support
-- [ ] Browser compatibility (Firefox, Safari)
 - [ ] Advanced filtering options
+- [ ] Unit and integration tests
+
+### 🔮 Future Plans
+- [ ] Browser compatibility (Firefox, Safari)
 - [ ] Historical analysis tracking
 - [ ] Community-driven risk database
+- [ ] Machine learning risk model improvements
+- [ ] Browser action context menus
+- [ ] Export analysis reports
 
 ## 🤝 Contributing
 
