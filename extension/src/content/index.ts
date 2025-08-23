@@ -3,6 +3,12 @@ class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
 
+  // Sentence interaction state
+  public hasInjectedStyles = false;
+  public selectedSentenceEl: HTMLElement | null = null;
+  public tooltipEl: HTMLElement | null = null;
+  public firstRunGuideShown = false;
+
   constructor() {
     this.init();
   }
@@ -16,9 +22,13 @@ class TermsAnalyzer {
 
     // Auto-detect terms on page load
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.autoDetectTerms());
+      document.addEventListener('DOMContentLoaded', () => {
+        this.autoDetectTerms();
+        this.initSentenceInteractions();
+      });
     } else {
       this.autoDetectTerms();
+      this.initSentenceInteractions();
     }
 
     console.log('Going Bananas T&C Analyzer initialized (TypeScript)');
@@ -41,6 +51,12 @@ class TermsAnalyzer {
             success: true,
             analysis: manualAnalysis
           });
+          break;
+
+        case 'autoAnalyze':
+          // Background may request this
+          const auto = await this.analyzeCurrentPage();
+          sendResponse({ success: true, analysis: auto });
           break;
 
         default:
@@ -245,3 +261,235 @@ class TermsAnalyzer {
 
 // Initialize the analyzer
 new TermsAnalyzer();
+
+// =====================
+// Sentence-level UX APIs
+// =====================
+interface WrappedSentenceMeta {
+  id: string;
+  text: string;
+}
+
+// Extend the class with methods via prototype to keep the top focused
+interface TermsAnalyzer {
+  initSentenceInteractions(): void;
+  injectStyles(): void;
+  findTermsContainer(): Element | null;
+  wrapSentences(container: Element): void;
+  onSentenceClick(event: MouseEvent): void;
+  showTooltip(targetEl: HTMLElement, content: string, isLoading?: boolean): void;
+  hideTooltip(): void;
+  explainSentence(text: string, targetEl: HTMLElement): Promise<void>;
+  showFirstRunGuideIfNeeded(): Promise<void>;
+}
+
+TermsAnalyzer.prototype.initSentenceInteractions = function initSentenceInteractions(this: TermsAnalyzer) {
+  try {
+    this.injectStyles();
+    const container = this.findTermsContainer();
+    if (!container) return;
+    this.wrapSentences(container);
+    this.showFirstRunGuideIfNeeded();
+    // Delegate clicks
+    container.addEventListener('click', (e: Event) => this.onSentenceClick(e as MouseEvent), { capture: false });
+  } catch (e) {
+    console.warn('Sentence interactions unavailable:', e);
+  }
+};
+
+TermsAnalyzer.prototype.injectStyles = function injectStyles(this: TermsAnalyzer) {
+  if (this.hasInjectedStyles) return;
+  const style = document.createElement('style');
+  style.id = 'banana-inline-styles';
+  style.textContent = `
+    .banana-sentence{cursor:pointer;transition:background-color .15s ease;border-radius:4px;padding:0 2px}
+    .banana-sentence:hover{background-color:rgba(255,235,59,.35)}
+    .banana-sentence--selected{background-color:rgba(76,175,80,.25);outline:1px solid rgba(76,175,80,.5)}
+    .banana-tooltip{position:absolute;z-index:2147483647;max-width:360px;background:#111;color:#fff;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);padding:10px 12px;font:13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    .banana-tooltip .banana-tooltip-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .banana-tooltip .banana-badge{background:#6d28d9;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px}
+    .banana-tooltip .banana-actions{display:flex;gap:8px;margin-top:8px}
+    .banana-tooltip button{background:#6d28d9;color:#fff;border:none;border-radius:6px;padding:6px 8px;cursor:pointer}
+    .banana-tooltip .banana-close{background:transparent;color:#bbb}
+    .banana-onboarding{position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
+    .banana-onboarding .banana-card{background:#fff;color:#111;max-width:520px;border-radius:14px;padding:18px 18px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .banana-onboarding h3{margin:0 0 6px 0;font-size:18px}
+    .banana-onboarding p{margin:0 0 12px 0;color:#444}
+    .banana-onboarding .banana-cta{display:flex;gap:8px;justify-content:flex-end}
+    .banana-onboarding .banana-cta button{background:#6d28d9;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer}
+    .banana-onboarding .banana-cta .secondary{background:#eee;color:#333}
+  `;
+  document.documentElement.appendChild(style);
+  this.hasInjectedStyles = true;
+};
+
+TermsAnalyzer.prototype.findTermsContainer = function findTermsContainer(): Element | null {
+  const selectors = [
+    'main',
+    '[role="main"]',
+    '.terms-content',
+    '.privacy-content',
+    '.legal-content',
+    'article',
+    '.main-content',
+    '.content'
+  ];
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    if (el && el.textContent && el.textContent.trim().length > 500) {
+      return el;
+    }
+  }
+  // Fallback: large text container
+  return document.body;
+};
+
+TermsAnalyzer.prototype.wrapSentences = function wrapSentences(container: Element) {
+  const disallowedTags = new Set(['SCRIPT','STYLE','NOSCRIPT','AUDIO','VIDEO','BUTTON','A','INPUT','TEXTAREA','SELECT','CODE','PRE','NAV','SVG']);
+  const sentenceRegex = /([^.!?\n\r]+[.!?]+)(\s+|$)/g;
+  let sentenceCount = 0;
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node: Node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      if (disallowedTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      const text = node.textContent || '';
+      if (text.trim().length < 40) return NodeFilter.FILTER_REJECT; // skip tiny fragments
+      if (parent.closest('.banana-tooltip, .banana-onboarding')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  } as unknown as NodeFilter);
+
+  const toProcess: Text[] = [];
+  let current: Node | null;
+  while ((current = walker.nextNode())) {
+    toProcess.push(current as Text);
+    if (toProcess.length > 2000) break; // safety cap
+  }
+
+  for (const textNode of toProcess) {
+    const text = textNode.textContent || '';
+    const frag = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    sentenceRegex.lastIndex = 0;
+    while ((match = sentenceRegex.exec(text)) && sentenceCount < 5000) {
+      const prefix = text.slice(lastIndex, match.index);
+      if (prefix) frag.appendChild(document.createTextNode(prefix));
+      const sentence = match[1];
+      const span = document.createElement('span');
+      span.className = 'banana-sentence';
+      span.setAttribute('data-banana-sid', `${Date.now()}_${sentenceCount++}`);
+      span.textContent = sentence.trim() + ' ';
+      frag.appendChild(span);
+      lastIndex = sentenceRegex.lastIndex;
+    }
+    const tail = text.slice(lastIndex);
+    if (tail) frag.appendChild(document.createTextNode(tail));
+    textNode.replaceWith(frag);
+    if (sentenceCount >= 5000) break;
+  }
+};
+
+TermsAnalyzer.prototype.onSentenceClick = function onSentenceClick(this: TermsAnalyzer, event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  if (!target || !target.classList.contains('banana-sentence')) return;
+
+  if (this.selectedSentenceEl) {
+    this.selectedSentenceEl.classList.remove('banana-sentence--selected');
+  }
+  this.selectedSentenceEl = target;
+  target.classList.add('banana-sentence--selected');
+
+  const text = target.innerText.trim();
+  this.showTooltip(target, 'Explaining…', true);
+  this.explainSentence(text, target);
+};
+
+TermsAnalyzer.prototype.showTooltip = function showTooltip(this: TermsAnalyzer, targetEl: HTMLElement, content: string, isLoading = false) {
+  // Create if needed
+  if (!this.tooltipEl) {
+    this.tooltipEl = document.createElement('div');
+    this.tooltipEl.className = 'banana-tooltip';
+    document.body.appendChild(this.tooltipEl);
+  }
+  this.tooltipEl.innerHTML = `
+    <div class="banana-tooltip-header">
+      <span>🍌</span><strong>Going Bananas</strong>
+      <span class="banana-badge">${isLoading ? 'Thinking' : 'Result'}</span>
+      <button class="banana-close" aria-label="Close">✕</button>
+    </div>
+    <div class="banana-tooltip-content">${content.replace(/</g,'&lt;')}</div>
+    <div class="banana-actions">
+      <button class="banana-copy">Copy</button>
+    </div>
+  `;
+  // Copy / close actions
+  const closeBtn = this.tooltipEl.querySelector('.banana-close') as HTMLElement | null;
+  if (closeBtn) closeBtn.onclick = () => this.hideTooltip();
+  const copyBtn = this.tooltipEl.querySelector('.banana-copy') as HTMLElement | null;
+  if (copyBtn) copyBtn.onclick = async () => {
+    try { await navigator.clipboard.writeText((this.tooltipEl!.querySelector('.banana-tooltip-content') as HTMLElement).innerText); } catch {}
+  };
+
+  // Position near target
+  const rect = targetEl.getBoundingClientRect();
+  const top = window.scrollY + rect.bottom + 8;
+  const left = window.scrollX + Math.min(rect.left, window.innerWidth - 380);
+  Object.assign(this.tooltipEl.style, { top: `${top}px`, left: `${left}px` });
+};
+
+TermsAnalyzer.prototype.hideTooltip = function hideTooltip(this: TermsAnalyzer) {
+  if (this.tooltipEl && this.tooltipEl.parentElement) {
+    this.tooltipEl.parentElement.removeChild(this.tooltipEl);
+  }
+  this.tooltipEl = null;
+  if (this.selectedSentenceEl) {
+    this.selectedSentenceEl.classList.remove('banana-sentence--selected');
+    this.selectedSentenceEl = null;
+  }
+};
+
+TermsAnalyzer.prototype.explainSentence = async function explainSentence(this: TermsAnalyzer, text: string, targetEl: HTMLElement) {
+  try {
+    const result = await (this as any).sendForAnalysis(text);
+    const summary: string = result?.summary || 'Here’s a plain-English explanation of this sentence.';
+    this.showTooltip(targetEl, summary, false);
+  } catch (e) {
+    this.showTooltip(targetEl, 'Failed to explain. Please try again.', false);
+  }
+};
+
+TermsAnalyzer.prototype.showFirstRunGuideIfNeeded = async function showFirstRunGuideIfNeeded(this: TermsAnalyzer) {
+  if (this.firstRunGuideShown) return;
+  try {
+    const { gb_seen_sentence_guide } = await chrome.storage.local.get('gb_seen_sentence_guide');
+    if (gb_seen_sentence_guide) return;
+  } catch {}
+
+  const overlay = document.createElement('div');
+  overlay.className = 'banana-onboarding';
+  overlay.innerHTML = `
+    <div class="banana-card">
+      <h3>Click any sentence to get a plain-English explanation</h3>
+      <p>We highlight sentences on terms and privacy pages. Click one to see an instant AI explanation. No data is stored.</p>
+      <div class="banana-cta">
+        <button class="secondary">Not now</button>
+        <button class="primary">Got it</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => {
+    overlay.remove();
+    chrome.storage.local.set({ gb_seen_sentence_guide: true }).catch(() => {});
+  };
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  const [skipBtn, okBtn] = overlay.querySelectorAll('button');
+  if (skipBtn) skipBtn.addEventListener('click', close);
+  if (okBtn) okBtn.addEventListener('click', close);
+  this.firstRunGuideShown = true;
+};
