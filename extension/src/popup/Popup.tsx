@@ -8,7 +8,7 @@ import { Settings, RefreshCw, Search, Share } from 'lucide-react';
 export const Popup: React.FC = () => {
   const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
   const [content, setContent] = useState('Loading...');
-
+  const [termsPages, setTermsPages] = useState<{ found: boolean; links: Array<{ text: string; url: string; type: string }> } | null>(null);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -18,6 +18,12 @@ export const Popup: React.FC = () => {
             setContent(response.content);
           } else {
             setContent("Couldn't read terms & conditions.");
+          }
+        });
+
+        chrome.tabs.sendMessage(tabs[0].id, { action: "findTermsPages" }, (response) => {
+          if (response && response.termsPages) {
+            setTermsPages(response.termsPages);
           }
         });
       } else {
@@ -60,6 +66,30 @@ export const Popup: React.FC = () => {
         </div>
       </div>
       <p>{content}</p>
+      
+      {termsPages && termsPages.found && (
+        <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200">
+          <h4 className="text-sm font-medium text-yellow-800 mb-1">Terms & Conditions Found:</h4>
+          <div className="space-y-1">
+            {termsPages.links.slice(0, 3).map((link, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <span className="text-xs">
+                  {link.type === 'current' ? '📍' : link.type === 'link' ? '🔗' : '💡'}
+                </span>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-800 truncate"
+                  title={link.text}
+                >
+                  {link.text}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="bg-white h-full overflow-y-auto">

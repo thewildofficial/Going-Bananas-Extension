@@ -41,6 +41,10 @@ class TermsAnalyzer {
           const pageContent = document.body.innerText;
           sendResponse({ content: pageContent });
           break;
+        case "findTermsPages":
+          const termsPages = this.findTermsPages();
+          sendResponse({ termsPages: termsPages });
+          break;
         case 'analyzeTerms':
           const analysis = await this.analyzeCurrentPage();
           sendResponse({
@@ -115,6 +119,90 @@ class TermsAnalyzer {
     ];
 
     return termsIndicators.some(indicator => bodyText.includes(indicator));
+  }
+
+  private findTermsPages(): { found: boolean; links: Array<{ text: string; url: string; type: string }> } {
+    const result = {
+      found: false,
+      links: [] as Array<{ text: string; url: string; type: string }>
+    };
+
+    if (this.isTermsPage()) {
+      result.found = true;
+      result.links.push({
+        text: document.title || 'Current Page',
+        url: window.location.href,
+        type: 'current'
+      });
+    }
+
+    const termsLinks = this.findTermsLinksOnPage();
+    result.links.push(...termsLinks);
+
+    const commonPaths = this.tryCommonTermsPaths();
+    result.links.push(...commonPaths);
+
+    if (result.links.length > 0) {
+      result.found = true;
+    }
+
+    return result;
+  }
+
+  private findTermsLinksOnPage(): Array<{ text: string; url: string; type: string }> {
+    const links: Array<{ text: string; url: string; type: string }> = [];
+    const allLinks = document.querySelectorAll('a[href]');
+    
+    const termsKeywords = [
+      'terms', 'conditions', 'terms of service', 'tos', 'terms of use',
+      'privacy policy', 'privacy', 'user agreement', 'terms and conditions',
+      'legal', 'eula', 'end user license agreement'
+    ];
+
+    allLinks.forEach(link => {
+      const linkElement = link as HTMLAnchorElement;
+      const href = linkElement.href.toLowerCase();
+      const text = linkElement.textContent?.toLowerCase() || '';
+      
+      const isTermsLink = termsKeywords.some(keyword => 
+        href.includes(keyword.replace(/\s+/g, '-')) || 
+        href.includes(keyword.replace(/\s+/g, '_')) ||
+        href.includes(keyword.replace(/\s+/g, '')) ||
+        text.includes(keyword)
+      );
+
+      if (isTermsLink) {
+        links.push({
+          text: linkElement.textContent || 'Terms Link',
+          url: linkElement.href,
+          type: 'link'
+        });
+      }
+    });
+
+    return links;
+  }
+
+  private tryCommonTermsPaths(): Array<{ text: string; url: string; type: string }> {
+    const commonPaths = [
+      '/terms', '/terms-of-service', '/terms-of-use', '/tos',
+      '/privacy', '/privacy-policy', '/legal', '/user-agreement',
+      '/terms-and-conditions', '/eula'
+    ];
+    
+    const currentDomain = window.location.origin;
+    const suggestions: Array<{ text: string; url: string; type: string }> = [];
+
+    commonPaths.forEach(path => {
+      const fullUrl = currentDomain + path;
+      suggestions.push({
+        text: `Try: ${path}`,
+        url: fullUrl,
+        type: 'suggestion'
+      });
+    });
+
+    return suggestions;
   }
 
   private async analyzeCurrentPage(): Promise<any> {
