@@ -41,3 +41,6 @@ Thumbs.db
 # Cache
 .cache/
 *.tmp
+
+# Cursor folder
+.cursor/

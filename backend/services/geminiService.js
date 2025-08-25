@@ -5,7 +5,7 @@ const logger = require('../utils/logger');
 class GeminiService {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
-    this.model = process.env.GEMINI_MODEL || 'gemini-pro';
+    this.model = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1 second base delay
     
