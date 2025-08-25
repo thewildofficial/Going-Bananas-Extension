@@ -1,5 +1,5 @@
 // Main Popup Component
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { RiskScore } from '@/components/RiskScore';
 import { KeyPoints } from '@/components/KeyPoints';
@@ -7,6 +7,25 @@ import { Settings, RefreshCw, Search, Share } from 'lucide-react';
 
 export const Popup: React.FC = () => {
   const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
+  const [content, setContent] = useState('Loading...');
+
+
+  useEffect(() => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "readPageContent" }, (response) => {
+          if (response && response.content) {
+            setContent(response.content);
+          } else {
+            setContent("Couldn't read terms & conditions.");
+          }
+        });
+      } else {
+        setContent('Unable to access tab.');
+      }
+    });
+  }, []);
+
 
   const handleSettings = () => {
     chrome.runtime.openOptionsPage();
@@ -40,6 +59,7 @@ export const Popup: React.FC = () => {
           </button>
         </div>
       </div>
+      <p>{content}</p>
 
       {/* Content */}
       <div className="bg-white h-full overflow-y-auto">

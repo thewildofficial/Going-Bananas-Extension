@@ -37,6 +37,10 @@ class TermsAnalyzer {
   private async handleMessage(message: any, sender: any, sendResponse: any): Promise<void> {
     try {
       switch (message.action) {
+        case "readPageContent":
+          const pageContent = document.body.innerText;
+          sendResponse({ content: pageContent });
+          break;
         case 'analyzeTerms':
           const analysis = await this.analyzeCurrentPage();
           sendResponse({
