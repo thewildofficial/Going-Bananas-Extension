@@ -169,6 +169,15 @@ router.post('/', async (req, res) => {
       passesCompleted: analysis.passes_completed || 1
     });
 
+    // Debug: Check if major_clauses is present
+    console.log('🔍 Analysis object has major_clauses:', !!analysis.major_clauses);
+    if (analysis.major_clauses) {
+      console.log('📊 Major clauses count:', analysis.major_clauses.clauses?.length || 0);
+    }
+
+    // Also log to file for debugging
+    require('fs').appendFileSync('/tmp/debug.log', `Analysis has major_clauses: ${!!analysis.major_clauses}\n`);
+
     // Return successful response
     res.json({
       success: true,
