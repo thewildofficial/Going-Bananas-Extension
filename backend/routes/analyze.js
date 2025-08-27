@@ -4,6 +4,7 @@ const Joi = require('joi');
 const GeminiService = require('../services/geminiService');
 const AnalysisService = require('../services/analysisService');
 const CacheService = require('../services/cacheService');
+const PersonalizationService = require('../services/personalizationService');
 const logger = require('../utils/logger');
 const { processText } = require('../utils/textProcessor');
 
@@ -13,6 +14,7 @@ const router = express.Router();
 const geminiService = new GeminiService();
 const analysisService = new AnalysisService(geminiService);
 const cacheService = new CacheService();
+const personalizationService = new PersonalizationService();
 
 // Request validation schema
 const analyzeSchema = Joi.object({
@@ -23,13 +25,22 @@ const analyzeSchema = Joi.object({
       'any.required': 'Text is required for analysis'
     }),
   url: Joi.string().uri().optional(),
+  userId: Joi.string().uuid().optional(), // For personalization
+  sessionId: Joi.string().optional(), // For streaming analysis
   options: Joi.object({
     language: Joi.string().valid('en', 'es', 'fr', 'de', 'it', 'pt').default('en'),
     detail_level: Joi.string().valid('basic', 'standard', 'comprehensive').default('standard'),
     cache: Joi.boolean().default(true),
     categories: Joi.array().items(
       Joi.string().valid('privacy', 'liability', 'termination', 'payment')
-    ).default(['privacy', 'liability', 'termination', 'payment'])
+    ).default(['privacy', 'liability', 'termination', 'payment']),
+    // New Gemini 2.5 features
+    multiPass: Joi.boolean().default(false), // Enable multi-pass analysis
+    streaming: Joi.boolean().default(false), // Enable streaming analysis
+    contextAware: Joi.boolean().default(false), // Use personalization context
+    // Advanced options
+    documentType: Joi.string().valid('privacy_policy', 'terms_of_service', 'user_agreement', 'eula', 'cookie_policy').optional(),
+    jurisdiction: Joi.string().optional()
   }).default({})
 });
 
@@ -54,12 +65,22 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { text, url, options } = validatedData;
-    
+        const { text, url, userId, sessionId, options } = validatedData;
+
+    console.log('🔍 ANALYSIS REQUEST RECEIVED:', {
+      textLength: text.length,
+      multiPass: options.multiPass,
+      contextAware: options.contextAware,
+      options: options
+    });
+
     logger.info('Analysis request received:', {
       textLength: text.length,
       url: url || 'not provided',
+      userId: userId || 'not provided',
+      sessionId: sessionId || 'not provided',
       options: options,
+      multiPass: options.multiPass,
       ip: req.ip,
       userAgent: req.get('User-Agent')
     });
@@ -97,13 +118,39 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Perform analysis
-    const analysis = await analysisService.analyzeText(processedText, {
+    // Get user personalization profile if available and requested
+    let personalizationContext = null;
+    if (options.contextAware && userId) {
+      try {
+        personalizationContext = await personalizationService.getUserProfile(userId);
+        logger.info('Personalization context loaded:', {
+          userId,
+          hasProfile: !!personalizationContext
+        });
+      } catch (error) {
+        logger.warn('Failed to load personalization context:', error.message);
+      }
+    }
+
+    // Enhanced analysis options
+    const enhancedOptions = {
       ...options,
       url: url,
       originalLength: text.length,
-      processedLength: processedText.length
-    });
+      processedLength: processedText.length,
+      personalizationContext: personalizationContext,
+      // Enable advanced features for Gemini 2.5
+      multiPass: options.multiPass || false,
+      streaming: options.streaming || false
+    };
+
+    // Handle streaming analysis
+    if (options.streaming && sessionId) {
+      return this.handleStreamingAnalysis(sessionId, processedText, enhancedOptions, res, startTime, cacheKey, req);
+    }
+
+    // Perform analysis (single-pass or multi-pass)
+    const analysis = await analysisService.analyzeText(processedText, enhancedOptions);
 
     // Cache result if enabled
     if (options.cache && cacheKey) {
@@ -117,7 +164,9 @@ router.post('/', async (req, res) => {
       riskLevel: analysis.risk_level,
       confidence: analysis.confidence,
       processingTime: Date.now() - startTime,
-      cached: false
+      cached: false,
+      multiPass: analysis.multi_pass_analysis || false,
+      passesCompleted: analysis.passes_completed || 1
     });
 
     // Return successful response
@@ -129,7 +178,12 @@ router.post('/', async (req, res) => {
         text_length: text.length,
         processed_length: processedText.length,
         cached: false,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        features: {
+          multiPass: analysis.multi_pass_analysis || false,
+          contextAware: !!personalizationContext,
+          streaming: false
+        }
       }
     });
 
@@ -343,6 +397,286 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve statistics'
+    });
+  }
+});
+
+// Streaming analysis handler
+handleStreamingAnalysis = async (sessionId, text, options, res, startTime, cacheKey, req) => {
+  try {
+    // Get WebSocket service from the request app locals
+    let webSocketService = null;
+
+    if (req && req.app.locals.webSocketService) {
+      webSocketService = req.app.locals.webSocketService;
+    }
+
+    if (!webSocketService) {
+      return res.status(503).json({
+        success: false,
+        error: 'Streaming service unavailable'
+      });
+    }
+
+    // Check if session exists and is valid
+    const session = webSocketService.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Streaming session not found'
+      });
+    }
+
+    // Start streaming analysis
+    res.json({
+      success: true,
+      message: 'Streaming analysis started',
+      sessionId: sessionId,
+      metadata: {
+        processing_time: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        features: {
+          streaming: true,
+          multiPass: options.multiPass || false,
+          contextAware: !!options.personalizationContext
+        }
+      }
+    });
+
+    // Perform analysis with progress callbacks
+    const analysisOptions = {
+      ...options,
+      onProgress: (progress) => {
+        webSocketService.sendAnalysisProgress(sessionId, progress);
+      }
+    };
+
+    const analysis = await analysisService.analyzeText(text, analysisOptions);
+
+    // Cache result if enabled
+    if (options.cache && cacheKey) {
+      await cacheService.set(cacheKey, analysis);
+    }
+
+    // Send final result via WebSocket
+    webSocketService.sendAnalysisResult(sessionId, analysis);
+
+    logger.info('Streaming analysis completed:', {
+      sessionId,
+      riskScore: analysis.risk_score,
+      processingTime: Date.now() - startTime
+    });
+
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+
+    logger.error('Streaming analysis failed:', {
+      sessionId,
+      error: error.message,
+      processingTime
+    });
+
+    // Send error via WebSocket if available
+    try {
+      if (req && req.app.locals.webSocketService) {
+        req.app.locals.webSocketService.sendAnalysisError(sessionId, {
+          message: error.message,
+          processingTime
+        });
+      }
+    } catch (wsError) {
+      logger.error('Failed to send WebSocket error:', wsError.message);
+    }
+
+    // Also send HTTP error response if connection still open
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Streaming analysis failed',
+        sessionId: sessionId,
+        metadata: {
+          processing_time: processingTime,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+  }
+};
+
+/**
+ * GET /websocket-info
+ * Get WebSocket connection information
+ */
+router.get('/websocket-info', (req, res) => {
+  try {
+    // Get WebSocket service from the running server instance
+    let webSocketService = null;
+
+    // Try to get the service from the app locals (set by server)
+    if (req.app.locals.webSocketService) {
+      webSocketService = req.app.locals.webSocketService;
+    }
+
+    // If not available, create a basic response
+    if (!webSocketService) {
+      const info = {
+        connectedClients: 0,
+        activeSessions: 0,
+        websocketUrl: `ws://localhost:${process.env.PORT || 3000}/ws`,
+        supportedMessageTypes: [
+          'start_analysis',
+          'cancel_analysis',
+          'ping',
+          'connection_established',
+          'analysis_started',
+          'analysis_progress',
+          'analysis_completed',
+          'analysis_error',
+          'pong'
+        ],
+        status: 'service_not_initialized'
+      };
+
+      return res.json({
+        success: true,
+        websocket: info,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const info = {
+      connectedClients: webSocketService.getConnectedClientsCount(),
+      activeSessions: webSocketService.getActiveSessions().length,
+      websocketUrl: `ws://localhost:${process.env.PORT || 3000}/ws`,
+      supportedMessageTypes: [
+        'start_analysis',
+        'cancel_analysis',
+        'ping',
+        'connection_established',
+        'analysis_started',
+        'analysis_progress',
+        'analysis_completed',
+        'analysis_error',
+        'pong'
+      ],
+      status: 'active'
+    };
+
+    res.json({
+      success: true,
+      websocket: info,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Failed to get WebSocket info:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve WebSocket information'
+    });
+  }
+});
+
+/**
+ * POST /streaming/start
+ * Start a streaming analysis session
+ */
+router.post('/streaming/start', async (req, res) => {
+  const startTime = Date.now();
+
+  try {
+    let webSocketService = null;
+
+    if (req.app.locals.webSocketService) {
+      webSocketService = req.app.locals.webSocketService;
+    }
+
+    if (!webSocketService) {
+      return res.status(503).json({
+        success: false,
+        error: 'Streaming service unavailable'
+      });
+    }
+
+    const streamingSchema = Joi.object({
+      text: Joi.string().min(50).max(50000).required(),
+      url: Joi.string().uri().optional(),
+      userId: Joi.string().uuid().optional(),
+      options: Joi.object({
+        language: Joi.string().valid('en', 'es', 'fr', 'de', 'it', 'pt').default('en'),
+        detail_level: Joi.string().valid('basic', 'standard', 'comprehensive').default('standard'),
+        categories: Joi.array().items(
+          Joi.string().valid('privacy', 'liability', 'termination', 'payment')
+        ).default(['privacy', 'liability', 'termination', 'payment']),
+        multiPass: Joi.boolean().default(true), // Enable multi-pass by default for streaming
+        contextAware: Joi.boolean().default(false)
+      }).default({})
+    });
+
+    const { error, value: validatedData } = streamingSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        details: error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message
+        }))
+      });
+    }
+
+    const { text, url, userId, options } = validatedData;
+
+    // Generate session ID
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Check if WebSocket connection exists (optional - session can be started without active WS)
+    const sessionInfo = webSocketService.getSession(sessionId);
+
+    logger.info('Streaming analysis session initiated:', {
+      sessionId,
+      textLength: text.length,
+      hasWebSocketConnection: !!sessionInfo,
+      ip: req.ip
+    });
+
+    res.json({
+      success: true,
+      sessionId: sessionId,
+      message: 'Streaming analysis session created',
+      websocketRequired: true,
+      websocketUrl: `ws://localhost:${process.env.PORT || 3000}/ws`,
+      nextSteps: [
+        'Connect to WebSocket at the provided URL',
+        'Send start_analysis message with the sessionId',
+        'Listen for analysis_progress and analysis_completed messages'
+      ],
+      metadata: {
+        processing_time: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        features: {
+          streaming: true,
+          multiPass: options.multiPass,
+          contextAware: options.contextAware
+        }
+      }
+    });
+
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+
+    logger.error('Failed to start streaming session:', {
+      error: error.message,
+      processingTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start streaming session',
+      metadata: {
+        processing_time: processingTime,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 });

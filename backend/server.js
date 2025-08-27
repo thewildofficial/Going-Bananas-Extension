@@ -16,11 +16,14 @@ const rateLimitMiddleware = require('./middleware/rateLimit');
 // Import routes
 const analyzeRoutes = require('./routes/analyze');
 const healthRoutes = require('./routes/health');
+const personalizationRoutes = require('./routes/personalization');
+const WebSocketService = require('./services/webSocketService');
 
 class Server {
   constructor() {
     this.app = express();
     this.port = process.env.PORT || 3000;
+    this.webSocketService = null;
     this.setupMiddleware();
     this.setupRoutes();
     this.setupErrorHandling();
@@ -74,6 +77,9 @@ class Server {
     this.app.use('/api/analyze', analyzeRoutes);
     this.app.use('/api', analyzeRoutes);
 
+    // Personalization routes
+    this.app.use('/api/personalization', personalizationRoutes);
+
     // Root route
     this.app.get('/', (req, res) => {
       res.json({
@@ -82,7 +88,9 @@ class Server {
         status: 'running',
         endpoints: {
           health: '/api/health',
-          analyze: '/api/analyze'
+          analyze: '/api/analyze',
+          personalization: '/api/personalization',
+          websocket: 'ws://localhost:3000/ws'
         },
         documentation: 'https://github.com/goingbananas/extension/blob/main/docs/API.md'
       });
@@ -95,7 +103,8 @@ class Server {
         error: 'Endpoint not found',
         available_endpoints: [
           'GET /api/health',
-          'POST /api/analyze'
+          'POST /api/analyze',
+          'GET|POST|PATCH|DELETE /api/personalization'
         ]
       });
     });
@@ -177,11 +186,19 @@ class Server {
         timestamp: new Date().toISOString()
       });
 
+      // Initialize WebSocket service
+      this.webSocketService = new WebSocketService(this.server);
+
+      // Store WebSocket service in app locals for route access
+      this.app.locals.webSocketService = this.webSocketService;
+
       // Log available endpoints
       logger.info('Available endpoints:', {
         endpoints: [
           `GET http://localhost:${this.port}/api/health`,
-          `POST http://localhost:${this.port}/api/analyze`
+          `POST http://localhost:${this.port}/api/analyze`,
+          `GET|POST|PATCH|DELETE http://localhost:${this.port}/api/personalization`,
+          `WebSocket ws://localhost:${this.port}/ws`
         ]
       });
     });
@@ -200,12 +217,21 @@ class Server {
 
   stop() {
     return new Promise((resolve) => {
+      // Shutdown WebSocket service
+      if (this.webSocketService) {
+        this.webSocketService.shutdown();
+      }
+
       if (this.server) {
         this.server.close(resolve);
       } else {
         resolve();
       }
     });
+  }
+
+  getWebSocketService() {
+    return this.webSocketService;
   }
 }
 

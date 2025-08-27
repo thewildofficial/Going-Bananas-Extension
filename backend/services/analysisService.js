@@ -71,18 +71,73 @@ class AnalysisService {
 
   async performAnalysis(text, options) {
     try {
+      // Enhance options with personalization context if available
+      const enhancedOptions = this.enhanceOptionsWithPersonalization(options);
+
+      // Debug logging
+      logger.debug('Analysis options:', {
+        originalMultiPass: options.multiPass,
+        enhancedMultiPass: enhancedOptions.multiPass,
+        contextAware: options.contextAware,
+        hasPersonalizationContext: !!options.personalizationContext
+      });
+
       // Use Gemini service for analysis
-      const analysis = await this.geminiService.analyzeTermsAndConditions(text, options);
-      
+      const analysis = await this.geminiService.analyzeTermsAndConditions(text, enhancedOptions);
+
       if (!analysis || typeof analysis !== 'object') {
         throw new Error('Invalid analysis response from Gemini service');
       }
+
+      // Debug logging for raw analysis
+      logger.debug('Raw analysis from Gemini:', {
+        hasMultiPass: !!analysis.multi_pass_analysis,
+        passesCompleted: analysis.passes_completed,
+        mock: analysis.mock,
+        riskScore: analysis.risk_score
+      });
 
       return analysis;
     } catch (error) {
       logger.error('Gemini analysis failed:', error.message);
       throw error;
     }
+  }
+
+  enhanceOptionsWithPersonalization(options) {
+    const enhanced = { ...options };
+
+    // Only enhance if personalization context is available
+    if (options.personalizationContext) {
+      const profile = options.personalizationContext;
+      const riskTolerance = profile.computedProfile?.riskTolerance || {};
+      const alertThresholds = profile.computedProfile?.alertThresholds || {};
+      const explanationStyle = profile.computedProfile?.explanationStyle || 'balanced_educational';
+
+      // Build personalized context for the AI
+      enhanced.personalizationContext = {
+        riskTolerance: riskTolerance,
+        alertThresholds: alertThresholds,
+        explanationStyle: explanationStyle,
+        userProfile: {
+          ageRange: profile.demographics?.ageRange,
+          occupation: profile.demographics?.occupation,
+          jurisdiction: profile.demographics?.jurisdiction?.primaryCountry,
+          techSophistication: profile.digitalBehavior?.techSophistication?.comfortLevel,
+          primaryActivities: profile.digitalBehavior?.usagePatterns?.primaryActivities || [],
+          privacyImportance: profile.riskPreferences?.privacy?.overallImportance,
+          arbitrationComfort: profile.riskPreferences?.legal?.arbitrationComfort
+        }
+      };
+
+      logger.debug('Enhanced analysis with personalization context', {
+        userId: profile.userId,
+        riskTolerance: riskTolerance.overall,
+        explanationStyle: explanationStyle
+      });
+    }
+
+    return enhanced;
   }
 
   async postProcessAnalysis(rawAnalysis, originalText, options) {
@@ -103,11 +158,20 @@ class AnalysisService {
         char_count: originalText.length,
         language: options.language || 'en',
         detail_level: options.detail_level || 'standard',
-        
+
         // Processing flags
         fallback: rawAnalysis.fallback || false,
         mock: rawAnalysis.mock || false,
-        
+
+        // Multi-pass analysis fields (preserve if present)
+        multi_pass_analysis: rawAnalysis.multi_pass_analysis,
+        passes_completed: rawAnalysis.passes_completed,
+        synthesis_method: rawAnalysis.synthesis_method,
+        aggregated_scores: rawAnalysis.aggregated_scores,
+        comprehensive_insights: rawAnalysis.comprehensive_insights,
+        document_metadata: rawAnalysis.document_metadata,
+        major_clauses: rawAnalysis.major_clauses,
+
         // Analysis version for tracking
         analyzer_version: '1.0.0'
       };
