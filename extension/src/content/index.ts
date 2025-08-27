@@ -1,9 +1,7 @@
-// Content Script (TypeScript)
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
 
-  // Sentence interaction state
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
   public tooltipEl: HTMLElement | null = null;
@@ -14,13 +12,11 @@ class TermsAnalyzer {
   }
 
   private init(): void {
-    // Listen for messages from popup
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
-      return true; // Keep message channel open for async response
+      return true;
     });
 
-    // Auto-detect terms on page load
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         this.autoDetectTerms();
@@ -45,6 +41,10 @@ class TermsAnalyzer {
           const termsPages = this.findTermsPages();
           sendResponse({ termsPages: termsPages });
           break;
+        case "fetchTermsContent":
+          const content = await this.fetchTermsContentFromUrl(message.url);
+          sendResponse({ content: content });
+          break;
         case 'analyzeTerms':
           const analysis = await this.analyzeCurrentPage();
           sendResponse({
@@ -62,7 +62,6 @@ class TermsAnalyzer {
           break;
 
         case 'autoAnalyze':
-          // Background may request this
           const auto = await this.analyzeCurrentPage();
           sendResponse({ success: true, analysis: auto });
           break;
@@ -205,6 +204,38 @@ class TermsAnalyzer {
     return suggestions;
   }
 
+  private async fetchTermsContentFromUrl(url: string): Promise<{ success: boolean; content?: string; error?: string }> {
+    try {
+      if (url === window.location.href) {
+        return {
+          success: true,
+          content: this.extractTermsText()
+        };
+      }
+
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          action: 'fetchExternalTerms',
+          url: url
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve({
+              success: false,
+              error: chrome.runtime.lastError.message
+            });
+          } else {
+            resolve(response);
+          }
+        });
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
   private async analyzeCurrentPage(): Promise<any> {
     if (this.isAnalyzing) {
       return null;
@@ -219,7 +250,6 @@ class TermsAnalyzer {
         return null;
       }
 
-      // Send to background script for API analysis
       const analysis = await this.sendForAnalysis(termsText);
       
       return analysis;
@@ -242,7 +272,6 @@ class TermsAnalyzer {
   }
 
   private extractTermsText(): string {
-    // Try multiple strategies to extract terms text
     const mainSelectors = [
       'main',
       '[role="main"]',
@@ -313,7 +342,6 @@ class TermsAnalyzer {
     } catch (error) {
       console.error('Failed to send for analysis:', error);
       
-      // Return mock analysis for development
       return this.getMockAnalysis(text);
     }
   }
@@ -351,18 +379,13 @@ class TermsAnalyzer {
   }
 }
 
-// Initialize the analyzer
 new TermsAnalyzer();
 
-// =====================
-// Sentence-level UX APIs
-// =====================
 interface WrappedSentenceMeta {
   id: string;
   text: string;
 }
 
-// Extend the class with methods via prototype to keep the top focused
 interface TermsAnalyzer {
   initSentenceInteractions(): void;
   injectStyles(): void;
@@ -500,7 +523,6 @@ TermsAnalyzer.prototype.onSentenceClick = function onSentenceClick(this: TermsAn
 };
 
 TermsAnalyzer.prototype.showTooltip = function showTooltip(this: TermsAnalyzer, targetEl: HTMLElement, content: string, isLoading = false) {
-  // Create if needed
   if (!this.tooltipEl) {
     this.tooltipEl = document.createElement('div');
     this.tooltipEl.className = 'banana-tooltip';
@@ -517,7 +539,6 @@ TermsAnalyzer.prototype.showTooltip = function showTooltip(this: TermsAnalyzer, 
       <button class="banana-copy">Copy</button>
     </div>
   `;
-  // Copy / close actions
   const closeBtn = this.tooltipEl.querySelector('.banana-close') as HTMLElement | null;
   if (closeBtn) closeBtn.onclick = () => this.hideTooltip();
   const copyBtn = this.tooltipEl.querySelector('.banana-copy') as HTMLElement | null;
