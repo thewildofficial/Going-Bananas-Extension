@@ -17,22 +17,38 @@ const logger = require('../utils/logger');
 const { userPersonalizationSchema, quizUpdateSchema } = require('../schemas/personalizationSchemas');
 const mongoose = require('mongoose');
 const UserProfile = require('../models/userProfile');
+const SupabaseService = require('./supabaseService');
 
 class PersonalizationService {
   constructor() {
     this.computationWeights = this.initializeComputationWeights();
     this.profiles = new Map(); // In-memory storage for testing
+    this.databaseType = process.env.DATABASE_TYPE || 'mongodb';
+    this.databaseService = null;
+
     if (process.env.NODE_ENV !== 'test') {
-      this.connectDB();
+      this.initializeDatabaseService();
     }
   }
 
-  async connectDB() {
+  async initializeDatabaseService() {
     try {
-      await mongoose.connect(process.env.MONGODB_URI);
-      logger.info('MongoDB connected successfully');
+      if (this.databaseType === 'supabase') {
+        this.databaseService = new SupabaseService();
+        const connected = await this.databaseService.testConnection();
+        if (!connected) {
+          throw new Error('Supabase connection failed');
+        }
+        await this.databaseService.initializeSchema();
+        logger.info('Using Supabase as database service');
+      } else {
+        // Default to MongoDB
+        await mongoose.connect(process.env.MONGODB_URI);
+        this.databaseService = 'mongodb';
+        logger.info('Using MongoDB as database service');
+      }
     } catch (error) {
-      logger.error('MongoDB connection failed:', error.message);
+      logger.error(`${this.databaseType} connection failed:`, error.message);
       process.exit(1);
     }
   }
@@ -126,14 +142,19 @@ class PersonalizationService {
 
       let savedProfile;
 
-      // Store the profile based on environment
+      // Store the profile based on environment and database type
       if (process.env.NODE_ENV === 'test') {
         // Use in-memory storage for testing
         savedProfile = { ...completeProfile };
         this.profiles.set(completeProfile.userId, savedProfile);
-      } else {
-        // Use MongoDB for production
+      } else if (this.databaseService === 'mongodb') {
+        // Use MongoDB
         savedProfile = await UserProfile.create(completeProfile);
+      } else if (this.databaseService && typeof this.databaseService.saveUserProfile === 'function') {
+        // Use Supabase or other database service
+        savedProfile = await this.databaseService.saveUserProfile(completeProfile);
+      } else {
+        throw new Error('No database service available');
       }
 
       logger.info('User profile saved successfully:', {
@@ -221,9 +242,14 @@ class PersonalizationService {
       if (process.env.NODE_ENV === 'test') {
         // Use in-memory storage for testing
         profile = this.profiles.get(userId);
-      } else {
-        // Use MongoDB for production
+      } else if (this.databaseService === 'mongodb') {
+        // Use MongoDB
         profile = await UserProfile.findOne({ userId: userId });
+      } else if (this.databaseService && typeof this.databaseService.getUserProfile === 'function') {
+        // Use Supabase or other database service
+        profile = await this.databaseService.getUserProfile(userId);
+      } else {
+        throw new Error('No database service available');
       }
 
       if (!profile) {
@@ -753,13 +779,22 @@ class PersonalizationService {
           logger.warn('Profile not found for deletion:', { userId });
           return false;
         }
-      } else {
-        // Use MongoDB for production
+      } else if (this.databaseService === 'mongodb') {
+        // Use MongoDB
         result = await UserProfile.deleteOne({ userId: userId });
         if (result.deletedCount === 0) {
           logger.warn('Profile not found for deletion:', { userId });
           return false;
         }
+      } else if (this.databaseService && typeof this.databaseService.deleteUserProfile === 'function') {
+        // Use Supabase or other database service
+        result = await this.databaseService.deleteUserProfile(userId);
+        if (!result) {
+          logger.warn('Profile not found for deletion:', { userId });
+          return false;
+        }
+      } else {
+        throw new Error('No database service available');
       }
 
       logger.info('User profile deleted successfully:', { userId });
