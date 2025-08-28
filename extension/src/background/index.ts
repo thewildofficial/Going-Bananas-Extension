@@ -13,7 +13,7 @@ interface AnalysisData {
 class BackgroundService {
   private apiBaseUrl = 'http://localhost:3000/api';
   private mockApiUrl = 'http://localhost:3001/api';
-  private useMockApi = true;
+  private useMockApi = false;
 
   constructor() {
     this.initializeListeners();
@@ -139,9 +139,17 @@ class BackgroundService {
   private async analyzeTermsText(data: AnalysisData): Promise<any> {
     const { text, url, timestamp } = data;
     
+    console.log('🎯 Background: analyzeTermsText called with:', {
+      textLength: text.length,
+      url: url,
+      useMockApi: this.useMockApi,
+      apiUrl: this.useMockApi ? this.mockApiUrl : this.apiBaseUrl
+    });
+    
     try {
       const cached = await this.getCachedAnalysis(url);
       if (cached) {
+        console.log('📦 Using cached analysis for:', url);
         return cached;
       }
 
@@ -156,8 +164,12 @@ class BackgroundService {
       };
 
       const apiUrl = this.useMockApi ? this.mockApiUrl : this.apiBaseUrl;
+      const fullUrl = `${apiUrl}/analyze`;
       
-      const response = await fetch(`${apiUrl}/analyze`, {
+      console.log('🚀 Making API call to:', fullUrl);
+      console.log('📤 Payload:', { textLength: payload.text.length, url: payload.url });
+      
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -165,21 +177,28 @@ class BackgroundService {
         body: JSON.stringify(payload)
       });
 
+      console.log('📡 API Response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API request failed:', response.status, errorText);
+        throw new Error(`API request failed: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
+      console.log('📥 API Response:', result);
       
       if (!result.success) {
+        console.error('❌ API returned error:', result.error);
         throw new Error(result.error || 'Analysis failed');
       }
 
       await this.cacheAnalysis(url, result.analysis);
       
+      console.log('✅ Analysis successful, returning:', result.analysis);
       return result.analysis;
     } catch (error) {
-      console.error('Terms analysis failed:', error);
+      console.error('💥 Terms analysis failed, falling back to mock:', error);
       
       return this.getMockAnalysis(text);
     }
@@ -193,11 +212,28 @@ class BackgroundService {
     if (changeInfo.status === 'complete' && tab.url) {
       const settings = await this.getSettings();
       
-      if (settings.autoAnalyze && this.isTermsUrl(tab.url)) {
+      // Always try auto-analysis on all websites, not just terms pages
+      if (settings.autoAnalyze && tab.url) {
+        console.log(`🔍 Tab updated: ${tab.url} - triggering auto analysis`);
         setTimeout(() => {
-          this.triggerAutoAnalysis(tabId);
-        }, 2000);
+          this.performAutoWebsiteAnalysis(tabId, tab.url!);
+        }, 2000); // Give page time to load
       }
+    }
+  }
+
+  private async performAutoWebsiteAnalysis(tabId: number, url: string): Promise<void> {
+    try {
+      console.log(`🚀 Starting auto-analysis for: ${url}`);
+      
+      // Send message to content script to start analysis
+      await chrome.tabs.sendMessage(tabId, {
+        action: 'autoAnalyze'
+      });
+      
+      console.log(`✅ Auto-analysis triggered for: ${url}`);
+    } catch (error) {
+      console.log(`❌ Could not trigger auto-analysis for ${url}:`, error);
     }
   }
 
