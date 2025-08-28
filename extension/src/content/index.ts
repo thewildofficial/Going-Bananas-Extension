@@ -1,9 +1,7 @@
-// Content Script (TypeScript)
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
 
-  // Sentence interaction state
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
   public tooltipEl: HTMLElement | null = null;
@@ -14,13 +12,11 @@ class TermsAnalyzer {
   }
 
   private init(): void {
-    // Listen for messages from popup
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
-      return true; // Keep message channel open for async response
+      return true;
     });
 
-    // Auto-detect terms on page load
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         this.autoDetectTerms();
@@ -37,6 +33,18 @@ class TermsAnalyzer {
   private async handleMessage(message: any, sender: any, sendResponse: any): Promise<void> {
     try {
       switch (message.action) {
+        case "readPageContent":
+          const pageContent = document.body.innerText;
+          sendResponse({ content: pageContent });
+          break;
+        case "findTermsPages":
+          const termsPages = this.findTermsPages();
+          sendResponse({ termsPages: termsPages });
+          break;
+        case "fetchTermsContent":
+          const content = await this.fetchTermsContentFromUrl(message.url);
+          sendResponse({ content: content });
+          break;
         case 'analyzeTerms':
           const analysis = await this.analyzeCurrentPage();
           sendResponse({
@@ -54,7 +62,6 @@ class TermsAnalyzer {
           break;
 
         case 'autoAnalyze':
-          // Background may request this
           const auto = await this.analyzeCurrentPage();
           sendResponse({ success: true, analysis: auto });
           break;
@@ -113,6 +120,122 @@ class TermsAnalyzer {
     return termsIndicators.some(indicator => bodyText.includes(indicator));
   }
 
+  private findTermsPages(): { found: boolean; links: Array<{ text: string; url: string; type: string }> } {
+    const result = {
+      found: false,
+      links: [] as Array<{ text: string; url: string; type: string }>
+    };
+
+    if (this.isTermsPage()) {
+      result.found = true;
+      result.links.push({
+        text: document.title || 'Current Page',
+        url: window.location.href,
+        type: 'current'
+      });
+    }
+
+    const termsLinks = this.findTermsLinksOnPage();
+    result.links.push(...termsLinks);
+
+    const commonPaths = this.tryCommonTermsPaths();
+    result.links.push(...commonPaths);
+
+    if (result.links.length > 0) {
+      result.found = true;
+    }
+
+    return result;
+  }
+
+  private findTermsLinksOnPage(): Array<{ text: string; url: string; type: string }> {
+    const links: Array<{ text: string; url: string; type: string }> = [];
+    const allLinks = document.querySelectorAll('a[href]');
+    
+    const termsKeywords = [
+      'terms', 'conditions', 'terms of service', 'tos', 'terms of use',
+      'privacy policy', 'privacy', 'user agreement', 'terms and conditions',
+      'legal', 'eula', 'end user license agreement'
+    ];
+
+    allLinks.forEach(link => {
+      const linkElement = link as HTMLAnchorElement;
+      const href = linkElement.href.toLowerCase();
+      const text = linkElement.textContent?.toLowerCase() || '';
+      
+      const isTermsLink = termsKeywords.some(keyword => 
+        href.includes(keyword.replace(/\s+/g, '-')) || 
+        href.includes(keyword.replace(/\s+/g, '_')) ||
+        href.includes(keyword.replace(/\s+/g, '')) ||
+        text.includes(keyword)
+      );
+
+      if (isTermsLink) {
+        links.push({
+          text: linkElement.textContent || 'Terms Link',
+          url: linkElement.href,
+          type: 'link'
+        });
+      }
+    });
+
+    return links;
+  }
+
+  private tryCommonTermsPaths(): Array<{ text: string; url: string; type: string }> {
+    const commonPaths = [
+      '/terms', '/terms-of-service', '/terms-of-use', '/tos',
+      '/privacy', '/privacy-policy', '/legal', '/user-agreement',
+      '/terms-and-conditions', '/eula'
+    ];
+    
+    const currentDomain = window.location.origin;
+    const suggestions: Array<{ text: string; url: string; type: string }> = [];
+
+    commonPaths.forEach(path => {
+      const fullUrl = currentDomain + path;
+      suggestions.push({
+        text: `Try: ${path}`,
+        url: fullUrl,
+        type: 'suggestion'
+      });
+    });
+
+    return suggestions;
+  }
+
+  private async fetchTermsContentFromUrl(url: string): Promise<{ success: boolean; content?: string; error?: string }> {
+    try {
+      if (url === window.location.href) {
+        return {
+          success: true,
+          content: this.extractTermsText()
+        };
+      }
+
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          action: 'fetchExternalTerms',
+          url: url
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve({
+              success: false,
+              error: chrome.runtime.lastError.message
+            });
+          } else {
+            resolve(response);
+          }
+        });
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
   private async analyzeCurrentPage(): Promise<any> {
     if (this.isAnalyzing) {
       return null;
@@ -127,7 +250,6 @@ class TermsAnalyzer {
         return null;
       }
 
-      // Send to background script for API analysis
       const analysis = await this.sendForAnalysis(termsText);
       
       return analysis;
@@ -150,7 +272,6 @@ class TermsAnalyzer {
   }
 
   private extractTermsText(): string {
-    // Try multiple strategies to extract terms text
     const mainSelectors = [
       'main',
       '[role="main"]',
@@ -221,7 +342,6 @@ class TermsAnalyzer {
     } catch (error) {
       console.error('Failed to send for analysis:', error);
       
-      // Return mock analysis for development
       return this.getMockAnalysis(text);
     }
   }
@@ -259,18 +379,13 @@ class TermsAnalyzer {
   }
 }
 
-// Initialize the analyzer
 new TermsAnalyzer();
 
-// =====================
-// Sentence-level UX APIs
-// =====================
 interface WrappedSentenceMeta {
   id: string;
   text: string;
 }
 
-// Extend the class with methods via prototype to keep the top focused
 interface TermsAnalyzer {
   initSentenceInteractions(): void;
   injectStyles(): void;
@@ -408,7 +523,6 @@ TermsAnalyzer.prototype.onSentenceClick = function onSentenceClick(this: TermsAn
 };
 
 TermsAnalyzer.prototype.showTooltip = function showTooltip(this: TermsAnalyzer, targetEl: HTMLElement, content: string, isLoading = false) {
-  // Create if needed
   if (!this.tooltipEl) {
     this.tooltipEl = document.createElement('div');
     this.tooltipEl.className = 'banana-tooltip';
@@ -425,7 +539,6 @@ TermsAnalyzer.prototype.showTooltip = function showTooltip(this: TermsAnalyzer, 
       <button class="banana-copy">Copy</button>
     </div>
   `;
-  // Copy / close actions
   const closeBtn = this.tooltipEl.querySelector('.banana-close') as HTMLElement | null;
   if (closeBtn) closeBtn.onclick = () => this.hideTooltip();
   const copyBtn = this.tooltipEl.querySelector('.banana-copy') as HTMLElement | null;

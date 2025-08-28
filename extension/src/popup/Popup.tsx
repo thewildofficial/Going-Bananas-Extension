@@ -1,5 +1,4 @@
-// Main Popup Component
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { RiskScore } from '@/components/RiskScore';
 import { KeyPoints } from '@/components/KeyPoints';
@@ -7,6 +6,59 @@ import { Settings, RefreshCw, Search, Share } from 'lucide-react';
 
 export const Popup: React.FC = () => {
   const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
+  const [content, setContent] = useState('Loading...');
+  const [termsPages, setTermsPages] = useState<{ found: boolean; links: Array<{ text: string; url: string; type: string }> } | null>(null);
+  const [selectedTermsContent, setSelectedTermsContent] = useState<string | null>(null);
+  const [loadingTermsContent, setLoadingTermsContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "readPageContent" }, (response) => {
+          if (response && response.content) {
+            setContent(response.content);
+          } else {
+            setContent("Couldn't read terms & conditions.");
+          }
+        });
+
+        chrome.tabs.sendMessage(tabs[0].id, { action: "findTermsPages" }, (response) => {
+          if (response && response.termsPages) {
+            setTermsPages(response.termsPages);
+          }
+        });
+      } else {
+        setContent('Unable to access tab.');
+      }
+    });
+  }, []);
+
+  const handleTermsLinkClick = async (url: string, linkText: string) => {
+    setLoadingTermsContent(url);
+    setSelectedTermsContent(null);
+
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { 
+            action: "fetchTermsContent", 
+            url: url 
+          }, (response) => {
+            setLoadingTermsContent(null);
+            if (response && response.content) {
+              setSelectedTermsContent(response.content.content || 'No content found');
+            } else {
+              setSelectedTermsContent(`Failed to load content from: ${linkText}`);
+            }
+          });
+        }
+      });
+    } catch (error) {
+      setLoadingTermsContent(null);
+      setSelectedTermsContent(`Error loading content: ${error}`);
+    }
+  };
+
 
   const handleSettings = () => {
     chrome.runtime.openOptionsPage();
@@ -17,7 +69,6 @@ export const Popup: React.FC = () => {
       await navigator.clipboard.writeText(
         `Check out this T&C analysis from Going Bananas! Risk Score: ${analysis?.risk_score?.toFixed(1)}`
       );
-      // Could show a toast notification here
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
     }
@@ -25,7 +76,6 @@ export const Popup: React.FC = () => {
 
   return (
     <div className="w-80 h-96 bg-gradient-to-br from-purple-600 to-blue-600 overflow-hidden">
-      {/* Header */}
       <div className="bg-gradient-to-r from-orange-400 to-pink-500 p-4 text-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -40,6 +90,49 @@ export const Popup: React.FC = () => {
           </button>
         </div>
       </div>
+      <p>{content}</p>
+      
+      {termsPages && termsPages.found && (
+        <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200">
+          <h4 className="text-sm font-medium text-yellow-800 mb-1">Terms & Conditions Found:</h4>
+          <div className="space-y-1">
+            {termsPages.links.slice(0, 3).map((link, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <span className="text-xs">
+                  {link.type === 'current' ? '📍' : link.type === 'link' ? '🔗' : '💡'}
+                </span>
+                <button
+                  onClick={() => handleTermsLinkClick(link.url, link.text)}
+                  className="text-xs text-blue-600 hover:text-blue-800 truncate text-left hover:underline"
+                  title={`Click to read: ${link.text}`}
+                  disabled={loadingTermsContent === link.url}
+                >
+                  {loadingTermsContent === link.url ? '⏳ Loading...' : link.text}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Selected Terms Content */}
+      {selectedTermsContent && (
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 max-h-32 overflow-y-auto">
+          <h4 className="text-sm font-medium text-blue-800 mb-1">Terms Content:</h4>
+          <div className="text-xs text-gray-700 leading-relaxed">
+            {selectedTermsContent.length > 500 
+              ? selectedTermsContent.substring(0, 500) + '...' 
+              : selectedTermsContent
+            }
+          </div>
+          <button
+            onClick={() => setSelectedTermsContent(null)}
+            className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+          >
+            ✕ Close
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="bg-white h-full overflow-y-auto">
@@ -77,14 +170,12 @@ export const Popup: React.FC = () => {
           </div>
         ) : analysis ? (
           <div className="p-4 space-y-4">
-            {/* Risk Score */}
             <RiskScore
               score={analysis.risk_score}
               level={analysis.risk_level}
               description={analysis.summary}
             />
 
-            {/* Summary */}
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Quick Summary</h3>
               <p className="text-sm text-gray-600 leading-relaxed">
@@ -92,10 +183,8 @@ export const Popup: React.FC = () => {
               </p>
             </div>
 
-            {/* Key Points */}
             <KeyPoints points={analysis.key_points} />
 
-            {/* Action Buttons */}
             <div className="flex gap-2 pt-2">
               <button
                 onClick={handleShare}
@@ -112,7 +201,6 @@ export const Popup: React.FC = () => {
               </button>
             </div>
 
-            {/* Metadata */}
             {analysis.mock && (
               <div className="text-xs text-gray-400 text-center">
                 ⚠️ Mock analysis for testing

@@ -1,7 +1,7 @@
-// Background Service Worker (TypeScript)
 interface ChromeMessage {
   action: string;
   data?: any;
+  url?: string;
 }
 
 interface AnalysisData {
@@ -20,18 +20,15 @@ class BackgroundService {
   }
 
   private initializeListeners(): void {
-    // Handle extension installation
     chrome.runtime.onInstalled.addListener((details) => {
       this.handleInstallation(details);
     });
 
-    // Handle messages from content scripts and popup
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
-      return true; // Keep message channel open for async responses
+      return true;
     });
 
-    // Handle tab updates
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       this.handleTabUpdate(tabId, changeInfo, tab);
     });
@@ -84,6 +81,18 @@ class BackgroundService {
           }
           break;
 
+        case 'fetchExternalTerms':
+          if (message.url) {
+            const fetchResult = await this.fetchExternalTermsContent(message.url);
+            sendResponse(fetchResult);
+          } else {
+            sendResponse({
+              success: false,
+              error: 'URL required'
+            });
+          }
+          break;
+
         default:
           sendResponse({
             success: false,
@@ -131,13 +140,11 @@ class BackgroundService {
     const { text, url, timestamp } = data;
     
     try {
-      // Check cache first
       const cached = await this.getCachedAnalysis(url);
       if (cached) {
         return cached;
       }
 
-      // Prepare request payload
       const payload = {
         text: text,
         url: url,
@@ -148,10 +155,8 @@ class BackgroundService {
         timestamp: timestamp
       };
 
-      // Choose API endpoint
       const apiUrl = this.useMockApi ? this.mockApiUrl : this.apiBaseUrl;
       
-      // Make API request
       const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
@@ -170,14 +175,12 @@ class BackgroundService {
         throw new Error(result.error || 'Analysis failed');
       }
 
-      // Cache the result
       await this.cacheAnalysis(url, result.analysis);
       
       return result.analysis;
     } catch (error) {
       console.error('Terms analysis failed:', error);
       
-      // Fall back to mock analysis
       return this.getMockAnalysis(text);
     }
   }
@@ -191,7 +194,6 @@ class BackgroundService {
       const settings = await this.getSettings();
       
       if (settings.autoAnalyze && this.isTermsUrl(tab.url)) {
-        // Auto-analyze if enabled
         setTimeout(() => {
           this.triggerAutoAnalysis(tabId);
         }, 2000);
@@ -307,9 +309,61 @@ class BackgroundService {
     }
     return Math.abs(hash).toString();
   }
+
+  private async fetchExternalTermsContent(url: string): Promise<{ success: boolean; content?: string; error?: string }> {
+    try {
+      // Validate URL
+      if (!url || !url.startsWith('http')) {
+        return {
+          success: false,
+          error: 'Invalid URL'
+        };
+      }
+
+      // Fetch the content
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}`
+        };
+      }
+
+      const html = await response.text();
+      
+      // Extract text content from HTML
+      const textContent = this.extractTextFromHtml(html);
+      
+      return {
+        success: true,
+        content: textContent
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch content'
+      };
+    }
+  }
+
+  private extractTextFromHtml(html: string): string {
+    const cleaned = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    return cleaned;
+  }
 }
 
-// Initialize the background service
 new BackgroundService();
 
 console.log('Going Bananas background service started (TypeScript)');
