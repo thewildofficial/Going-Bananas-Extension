@@ -152,7 +152,7 @@ class BackgroundService {
     
     try {
       const cached = await this.getCachedAnalysis(url);
-      if (cached) {
+      if (cached && false) {
         console.log('📦 Using cached analysis for:', url);
         return cached;
       }
@@ -162,9 +162,13 @@ class BackgroundService {
         url: url,
         options: {
           language: 'en',
-          detail_level: 'standard'
-        },
-        timestamp: timestamp
+          detail_level: 'standard',
+          cache: false,
+          categories: ['privacy', 'liability', 'termination', 'payment'],
+          multiPass: false,
+          streaming: false,
+          contextAware: false
+        }
       };
 
       const fullUrl = `${apiUrl}/analyze`;
@@ -303,7 +307,7 @@ class BackgroundService {
         autoAnalyze: true,
         showNotifications: true,
         riskThreshold: 6.0,
-        apiEndpoint: 'mock'
+        apiEndpoint: 'real'
       };
     }
   }

@@ -20,11 +20,9 @@ class TermsAnalyzer {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         this.autoDetectTerms();
-        // this.initSentenceInteractions(); // Temporarily disabled
       });
     } else {
       this.autoDetectTerms();
-      // this.initSentenceInteractions(); // Temporarily disabled
     }
 
     console.log('Going Bananas T&C Analyzer initialized (TypeScript)');
@@ -85,7 +83,6 @@ class TermsAnalyzer {
   private async autoDetectTerms(): Promise<void> {
     console.log(`🔍 Auto-detecting terms on: ${this.currentUrl}`);
     
-    // Try to find terms content on any website
     const extractedText = this.extractPageContent();
     
     if (extractedText && extractedText.length > 100) {
@@ -107,29 +104,53 @@ class TermsAnalyzer {
   }
 
   private async sendForAutoAnalysis(text: string): Promise<any> {
-    console.log('🚀 Sending text for analysis...');
+    console.log('🚀 Sending text for analysis directly to API...');
     
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'analyzeTermsText',
-        data: {
-          text: text,
-          url: this.currentUrl,
-          timestamp: Date.now()
+      const payload = {
+        text: text,
+        url: this.currentUrl,
+        options: {
+          language: 'en',
+          detail_level: 'standard',
+          cache: false,
+          categories: ['privacy', 'liability', 'termination', 'payment'],
+          multiPass: false,
+          streaming: false,
+          contextAware: false
         }
+      };
+
+      console.log('📤 API Payload:', { textLength: payload.text.length, url: payload.url });
+      
+      const response = await fetch('http://localhost:3000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
-      console.log('📡 Received response from background:', response);
+      console.log('📡 API Response status:', response.status, response.statusText);
 
-      if (response.success) {
-        console.log('✅ Analysis complete:', response.analysis);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API request failed:', response.status, errorText);
+        throw new Error(`API request failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('📥 API Response:', result);
+
+      if (result.success) {
+        console.log('✅ Analysis complete:', result.analysis);
         this.hideLoadingNotification();
-        return response.analysis;
+        return result.analysis;
       } else {
-        throw new Error(response.error || 'Analysis failed');
+        throw new Error(result.error || 'Analysis failed');
       }
     } catch (error) {
-      console.error('❌ Failed to send for analysis:', error);
+      console.error('❌ Failed to call API directly:', error);
       this.hideLoadingNotification();
       throw error;
     }
@@ -170,7 +191,6 @@ class TermsAnalyzer {
       </div>
     `;
     
-    // Add CSS animation
     const style = document.createElement('style');
     style.textContent = `
       @keyframes spin {
@@ -196,7 +216,6 @@ class TermsAnalyzer {
     const riskColor = this.getRiskColor(analysis.risk_level);
     const riskScore = Math.round(analysis.risk_score || 5);
     
-    // Create compact notification first
     const notification = document.createElement('div');
     notification.id = 'going-bananas-result';
     notification.style.cssText = `
@@ -217,7 +236,6 @@ class TermsAnalyzer {
       transition: all 0.3s ease;
     `;
     
-    // Build category display
     const categories = analysis.categories || {};
     const categoriesHtml = this.buildCategoriesDisplay(categories);
     
@@ -270,7 +288,6 @@ class TermsAnalyzer {
     
     document.body.appendChild(notification);
     
-    // Auto-hide after 12 seconds if not expanded
     setTimeout(() => {
       if (notification.parentNode && !isExpanded) {
         notification.style.opacity = '0';
@@ -325,9 +342,9 @@ class TermsAnalyzer {
   }
 
   private getCategoryRiskColor(score: number): string {
-    if (score >= 7) return '#dc3545'; // High risk
-    if (score >= 4) return '#ffc107'; // Medium risk
-    return '#28a745'; // Low risk
+    if (score >= 7) return '#dc3545';
+    if (score >= 4) return '#ffc107';
+    return '#28a745';
   }
 
   private expandNotification(notification: HTMLElement, analysis: any): void {
@@ -338,7 +355,6 @@ class TermsAnalyzer {
     const riskColor = this.getRiskColor(analysis.risk_level);
     const riskScore = Math.round(analysis.risk_score || 5);
     
-    // Build detailed display
     const detailedHtml = this.buildDetailedAnalysisDisplay(analysis);
     
     notification.innerHTML = `
@@ -393,7 +409,6 @@ class TermsAnalyzer {
     notification.style.maxHeight = 'auto';
     notification.style.overflowY = 'visible';
     
-    // Restore compact view
     const riskColor = this.getRiskColor(analysis.risk_level);
     const riskScore = Math.round(analysis.risk_score || 5);
     const categories = analysis.categories || {};
@@ -438,7 +453,6 @@ class TermsAnalyzer {
   private buildDetailedAnalysisDisplay(analysis: any): string {
     let html = '';
     
-    // Summary section
     if (analysis.summary) {
       html += `
         <div style="margin-bottom: 16px;">
@@ -452,12 +466,35 @@ class TermsAnalyzer {
       `;
     }
     
-    // Categories detailed view
     if (analysis.categories) {
       html += this.buildDetailedCategoriesDisplay(analysis.categories);
     }
+
+    if (analysis.major_clauses && analysis.major_clauses.clauses) {
+      html += `
+        <div style="margin-bottom: 16px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            ⚖️ Major Clauses
+          </div>
+          <div style="font-size: 12px;">
+            ${analysis.major_clauses.clauses.map((clause: any) => {
+              const riskColor = this.getRiskColor(clause.risk_level);
+              return `
+                <div style="margin: 6px 0; padding: 8px; background: #f8f9fa; border-left: 3px solid ${riskColor}; border-radius: 4px;">
+                  <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${clause.title}</div>
+                  <div style="color: #666; font-size: 11px; line-height: 1.3; margin-bottom: 4px;">${clause.description}</div>
+                  <div style="display: flex; gap: 8px; font-size: 10px;">
+                    <span style="background: ${riskColor}; color: white; padding: 2px 6px; border-radius: 8px;">${clause.risk_level}</span>
+                    <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">${clause.importance}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
     
-    // Key points
     if (analysis.key_points && Array.isArray(analysis.key_points)) {
       html += `
         <div style="margin-bottom: 16px;">
@@ -474,19 +511,114 @@ class TermsAnalyzer {
         </div>
       `;
     }
+
+    if (analysis.insights) {
+      html += this.buildInsightsDisplay(analysis.insights);
+    }
     
-    // Technical details
-    if (analysis.mock !== undefined || analysis.timestamp) {
+    if (analysis.confidence !== undefined) {
       html += `
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
-          <div style="font-size: 10px; color: #999; text-align: center;">
-            ${analysis.mock ? '🔧 Mock Data' : '✅ Live Analysis'} 
-            ${analysis.timestamp ? `• ${new Date(analysis.timestamp).toLocaleTimeString()}` : ''}
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            🎯 Analysis Confidence
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; height: 8px; background: #e9ecef; border-radius: 4px;">
+              <div style="height: 100%; background: #28a745; border-radius: 4px; width: ${Math.round(analysis.confidence * 100)}%;"></div>
+            </div>
+            <span style="font-size: 12px; font-weight: 600; color: #28a745;">${Math.round(analysis.confidence * 100)}%</span>
           </div>
         </div>
       `;
     }
     
+    if (analysis.mock !== undefined || analysis.analysis_time) {
+      html += `
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+          <div style="font-size: 10px; color: #999; text-align: center;">
+            ${analysis.mock ? '🔧 Mock Data' : '✅ Live Analysis'} 
+            ${analysis.analysis_time ? `• ${new Date(analysis.analysis_time).toLocaleTimeString()}` : ''}
+            ${analysis.word_count ? `• ${analysis.word_count} words` : ''}
+          </div>
+        </div>
+      `;
+    }
+    
+    return html;
+  }
+
+  private buildInsightsDisplay(insights: any): string {
+    if (!insights || typeof insights !== 'object') {
+      return '';
+    }
+
+    let html = `
+      <div style="margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+          💡 Insights & Recommendations
+        </div>
+    `;
+
+    if (insights.recommendations && Array.isArray(insights.recommendations)) {
+      html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Recommendations:</div>
+          ${insights.recommendations.map((rec: string) => `
+            <div style="margin: 3px 0; padding: 4px 8px; background: #d1ecf1; border-left: 3px solid #17a2b8; border-radius: 4px; font-size: 11px;">
+              💡 ${rec}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    if (insights.key_risk_factors && Array.isArray(insights.key_risk_factors)) {
+      html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Key Risk Factors:</div>
+          ${insights.key_risk_factors.map((risk: any) => {
+            const riskColor = this.getCategoryRiskColor(risk.score || 5);
+            return `
+              <div style="margin: 3px 0; padding: 4px 8px; background: #f8f9fa; border-left: 3px solid ${riskColor}; border-radius: 4px; font-size: 11px;">
+                ⚠️ <strong>${risk.category}:</strong> ${risk.severity} severity (${risk.score}/10)
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    if (insights.comparative_risk) {
+      html += `
+        <div style="margin-bottom: 8px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Comparative Risk:</div>
+          <div style="padding: 4px 8px; background: #e9ecef; border-radius: 4px; font-size: 11px; color: #495057;">
+            📊 ${insights.comparative_risk}
+          </div>
+        </div>
+      `;
+    }
+
+    if (insights.text_complexity) {
+      html += `
+        <div style="margin-bottom: 8px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Text Complexity:</div>
+          <div style="display: flex; gap: 8px; font-size: 10px;">
+            <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">
+              ${insights.text_complexity.level}
+            </span>
+            <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">
+              ${insights.text_complexity.sentence_count} sentences
+            </span>
+            <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">
+              ${insights.text_complexity.avg_words_per_sentence} avg words/sentence
+            </span>
+          </div>
+        </div>
+      `;
+    }
+
+    html += '</div>';
     return html;
   }
 
@@ -564,7 +696,6 @@ class TermsAnalyzer {
   }
 
   private openAnalysisPopup(analysis: any): void {
-    // This will open the extension popup with the analysis details
     chrome.runtime.sendMessage({
       action: 'openPopup',
       data: analysis
@@ -779,7 +910,6 @@ class TermsAnalyzer {
   }
 
   private extractPageContent(): string {
-    // Remove unwanted elements
     const elementsToRemove = [
       'script', 'style', 'nav', 'header', 'footer',
       '.navigation', '.menu', '.sidebar', '.ads',
@@ -808,19 +938,38 @@ class TermsAnalyzer {
 
   private async sendForAnalysis(text: string): Promise<any> {
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'analyzeTermsText',
-        data: {
-          text: text,
-          url: this.currentUrl,
-          timestamp: Date.now()
+      const payload = {
+        text: text,
+        url: this.currentUrl,
+        options: {
+          language: 'en',
+          detail_level: 'standard',
+          cache: false,
+          categories: ['privacy', 'liability', 'termination', 'payment'],
+          multiPass: false,
+          streaming: false,
+          contextAware: false
         }
+      };
+
+      const response = await fetch('http://localhost:3000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
-      if (response.success) {
-        return response.analysis;
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        return result.analysis;
       } else {
-        throw new Error(response.error || 'Analysis failed');
+        throw new Error(result.error || 'Analysis failed');
       }
     } catch (error) {
       console.error('Failed to send for analysis:', error);
@@ -862,5 +1011,4 @@ class TermsAnalyzer {
   }
 }
 
-// Initialize the analyzer
 new TermsAnalyzer();

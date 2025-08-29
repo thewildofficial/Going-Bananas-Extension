@@ -176,9 +176,6 @@ router.post('/', async (req, res) => {
       console.log('📊 Major clauses count:', analysis.major_clauses.clauses?.length || 0);
     }
 
-    // Also log to file for debugging
-    require('fs').appendFileSync('/tmp/debug.log', `Analysis has major_clauses: ${!!analysis.major_clauses}\n`);
-
     // Return successful response
     res.json({
       success: true,
