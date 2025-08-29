@@ -18,7 +18,7 @@ class CacheService {
     this.defaultTTL = parseInt(process.env.REDIS_TTL) || 86400;
     
     // Initialize Redis if available
-    this.initializeRedis();
+    // this.initializeRedis();
     
     // Cleanup interval for memory cache
     this.cleanupInterval = setInterval(() => {

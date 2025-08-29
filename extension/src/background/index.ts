@@ -13,7 +13,7 @@ interface AnalysisData {
 class BackgroundService {
   private apiBaseUrl = 'http://localhost:3000/api';
   private mockApiUrl = 'http://localhost:3001/api';
-  private useMockApi = false;
+  
 
   constructor() {
     this.initializeListeners();
@@ -139,11 +139,15 @@ class BackgroundService {
   private async analyzeTermsText(data: AnalysisData): Promise<any> {
     const { text, url, timestamp } = data;
     
+    const settings = await this.getSettings();
+    const useMockApi = settings.apiEndpoint === 'mock';
+    const apiUrl = useMockApi ? this.mockApiUrl : this.apiBaseUrl;
+
     console.log('🎯 Background: analyzeTermsText called with:', {
       textLength: text.length,
       url: url,
-      useMockApi: this.useMockApi,
-      apiUrl: this.useMockApi ? this.mockApiUrl : this.apiBaseUrl
+      useMockApi: useMockApi,
+      apiUrl: apiUrl
     });
     
     try {
@@ -163,7 +167,6 @@ class BackgroundService {
         timestamp: timestamp
       };
 
-      const apiUrl = this.useMockApi ? this.mockApiUrl : this.apiBaseUrl;
       const fullUrl = `${apiUrl}/analyze`;
       
       console.log('🚀 Making API call to:', fullUrl);

@@ -42,13 +42,14 @@ const analyzeSchema = Joi.object({
     documentType: Joi.string().valid('privacy_policy', 'terms_of_service', 'user_agreement', 'eula', 'cookie_policy').optional(),
     jurisdiction: Joi.string().optional()
   }).default({})
-});
+}).unknown(true);
 
 /**
  * POST /analyze
  * Analyze terms and conditions text
  */
 router.post('/', async (req, res) => {
+  console.log('Request Body:', req.body);
   const startTime = Date.now();
   
   try {

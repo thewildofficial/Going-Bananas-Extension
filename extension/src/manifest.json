@@ -11,6 +11,7 @@
     "http://*/*",
     "https://*/*"
   ],
+  
   "background": {
     "service_worker": "background/background.js"
   },
