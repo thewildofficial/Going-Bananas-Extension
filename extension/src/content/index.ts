@@ -3,6 +3,7 @@ import { getApiUrl } from '../utils/config';
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
+  private pageHeadings: string[] = [];
 
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
@@ -19,12 +20,15 @@ class TermsAnalyzer {
       return true;
     });
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        this.autoDetectTerms();
-      });
-    } else {
+    const onReady = () => {
+      this.pageHeadings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
       this.autoDetectTerms();
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady);
+    } else {
+      onReady();
     }
 
     console.log('Going Bananas T&C Analyzer initialized (TypeScript)');
@@ -113,14 +117,13 @@ class TermsAnalyzer {
 
   private isTermsPageByContent(): boolean {
     const title = document.title.toLowerCase();
-    const headings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
     const keywords = ['terms of service', 'privacy policy', 'user agreement', 'terms and conditions'];
 
     if (keywords.some(keyword => title.includes(keyword))) {
       return true;
     }
 
-    for (const heading of headings) {
+    for (const heading of this.pageHeadings) {
       if (keywords.some(keyword => heading.includes(keyword))) {
         return true;
       }
