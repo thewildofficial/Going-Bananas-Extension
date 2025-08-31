@@ -20,9 +20,7 @@ class TermsAnalyzer {
     });
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        this.autoDetectTerms();
-      });
+      document.addEventListener('DOMContentLoaded', () => this.autoDetectTerms());
     } else {
       this.autoDetectTerms();
     }
@@ -82,15 +80,75 @@ class TermsAnalyzer {
     }
   }
 
+  private isPdf(): boolean {
+    return this.currentUrl.toLowerCase().endsWith('.pdf');
+  }
+
+  private isTermsPageByUrl(): boolean {
+    const url = this.currentUrl.toLowerCase();
+    const keywords = ['terms', 'privacy', 'policy', 'agreement', 'legal', 'tos', 'eula'];
+    const subdomains = ['legal', 'terms', 'privacy'];
+
+    // Parse the URL only once
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname;
+    const parts = hostname.split('.');
+    if (parts.length > 1 && subdomains.includes(parts[0])) {
+      return true;
+    }
+
+    // Check for common path patterns
+    const path = parsedUrl.pathname;
+    if (keywords.some(keyword => new RegExp(`[/-]${keyword}([/-]|$)`).test(path))) {
+        return true;
+    }
+
+    return false;
+  }
+
+  private isTermsPageByContent(): boolean {
+    const title = document.title.toLowerCase();
+    const keywords = ['terms of service', 'privacy policy', 'user agreement', 'terms and conditions'];
+
+    if (keywords.some(keyword => title.includes(keyword))) {
+      return true;
+    }
+
+    // Only query headings if title check didn't match
+    const headings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
+    // Build a regex to match any keyword
+    const keywordPattern = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const keywordRegex = new RegExp(keywordPattern, 'i');
+    if (headings.some(heading => keywordRegex.test(heading))) {
+      return true;
+    }
+
+    return false;
+  }
+
   private async autoDetectTerms(): Promise<void> {
-    console.log(`🔍 Auto-detecting terms on: ${this.currentUrl}`);
-    
+    if (this.isPdf()) {
+      // TODO: Implement PDF parsing
+      console.log('📄 PDF file detected. PDF parsing is not yet implemented.');
+      this.showPdfNotification(); // New notification for PDFs
+      return;
+    }
+
+    if (this.isTermsPageByUrl() || this.isTermsPageByContent()) {
+        this.triggerAnalysis();
+    } else {
+      console.log('✅ Not a terms page. No automatic analysis will be performed.');
+    }
+  }
+
+  private async triggerAnalysis(): Promise<void> {
+    console.log(`🔍 Terms page detected on: ${this.currentUrl}`);
     const extractedText = this.extractPageContent();
-    
+
     if (extractedText && extractedText.length > 100) {
       console.log(`📄 Extracted ${extractedText.split(' ').length} words of text for analysis`);
       this.showLoadingNotification();
-      
+
       try {
         const analysis = await this.sendForAutoAnalysis(extractedText);
         if (analysis) {
@@ -159,6 +217,22 @@ class TermsAnalyzer {
     }
   }
 
+  private showPdfNotification(): void {
+    this.hideExistingNotifications();
+    
+    const notification = document.createElement('div');
+    notification.id = 'going-bananas-pdf-notification';
+    notification.className = 'going-bananas-notification going-bananas-pdf-notification';
+    notification.innerHTML = `
+      <div class="going-bananas-notification-content">
+        <span>🍌 PDF detected. Manual analysis is required.</span>
+        <button id="going-bananas-pdf-analyze" class="going-bananas-pdf-button" disabled title="PDF analysis is not yet supported.">Analyze</button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+  }
+
   private showLoadingNotification(): void {
     this.hideExistingNotifications();
 
@@ -170,7 +244,6 @@ class TermsAnalyzer {
           position: fixed;
           top: 20px;
           right: 20px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           padding: 16px 20px;
           border-radius: 12px;
@@ -181,6 +254,13 @@ class TermsAnalyzer {
           font-weight: 500;
           backdrop-filter: blur(10px);
           border: 1px solid rgba(255,255,255,0.2);
+        }
+        .going-bananas-loading-notification {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .going-bananas-pdf-notification {
+          background: #ffc107;
+          color: #333;
         }
         .going-bananas-notification-content {
           display: flex;
@@ -195,6 +275,96 @@ class TermsAnalyzer {
           border-radius: 50%;
           animation: going-bananas-spin 1s linear infinite;
         }
+        .going-bananas-pdf-button {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .going-bananas-pdf-button:disabled {
+            background: #888;
+            cursor: not-allowed;
+        }
+        .going-bananas-result-notification {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: white;
+          color: #333;
+          padding: 16px;
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+          z-index: 10001;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 14px;
+          max-width: 300px;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+        .going-bananas-result-header {
+          margin-bottom: 12px;
+        }
+        .going-bananas-result-title {
+          font-weight: 600;
+          color: #1a1a1a;
+          margin-bottom: 8px;
+        }
+        .going-bananas-result-meta {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        .going-bananas-risk-level {
+          font-weight: 500;
+        }
+        .going-bananas-risk-score {
+          color: white;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .going-bananas-expand-hint {
+          color: #007bff;
+          font-size: 12px;
+          font-weight: 500;
+          text-align: center;
+          padding-top: 8px;
+          border-top: 1px solid #eee;
+        }
+        .going-bananas-detail-header {
+          margin-bottom: 12px;
+        }
+        .going-bananas-detail-title {
+          font-weight: 600;
+          color: #1a1a1a;
+        }
+        .going-bananas-close-button {
+          background: none;
+          border: none;
+          font-size: 16px;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+        }
+        .going-bananas-detail-meta {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+        .going-bananas-collapse-hint {
+          color: #007bff;
+          font-size: 12px;
+          font-weight: 500;
+          text-align: center;
+          padding-top: 8px;
+          border-top: 1px solid #eee;
+          cursor: pointer;
+        }
         @keyframes going-bananas-spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
@@ -206,7 +376,7 @@ class TermsAnalyzer {
 
     const notification = document.createElement('div');
     notification.id = 'going-bananas-loading';
-    notification.className = 'going-bananas-notification';
+    notification.className = 'going-bananas-notification going-bananas-loading-notification';
     notification.innerHTML = `
       <div class="going-bananas-notification-content">
         <div class="going-bananas-spinner"></div>
@@ -231,59 +401,30 @@ class TermsAnalyzer {
     
     const notification = document.createElement('div');
     notification.id = 'going-bananas-result';
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: white;
-      color: #333;
-      padding: 16px;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-      z-index: 10001;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      max-width: 300px;
-      border-left: 4px solid ${riskColor};
-      cursor: pointer;
-      transition: all 0.3s ease;
-    `;
+    notification.className = 'going-bananas-result-notification';
+    notification.style.borderLeft = `4px solid ${riskColor}`;
     
     const categories = analysis.categories || {};
     const categoriesHtml = this.buildCategoriesDisplay(categories);
     const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
     
     notification.innerHTML = `
-      <div style="margin-bottom: 12px;">
-        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+      <div class="going-bananas-result-header">
+        <div class="going-bananas-result-title">
           🍌 Terms Analysis Complete
         </div>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-          <span style="font-weight: 500; color: ${riskColor};">
+        <div class="going-bananas-result-meta">
+          <span class="going-bananas-risk-level" style="color: ${riskColor};">
             ${analysis.risk_level ? analysis.risk_level.toUpperCase() : 'UNKNOWN'} Risk
           </span>
-          <span style="
-            background: ${riskColor}; 
-            color: white; 
-            padding: 2px 8px; 
-            border-radius: 12px; 
-            font-size: 12px; 
-            font-weight: 600;
-          ">
+          <span class="going-bananas-risk-score" style="background: ${riskColor};">
             ${riskScore}/10
           </span>
           ${confidenceHtml}
         </div>
       </div>
       ${categoriesHtml}
-      <div style="
-        color: #007bff; 
-        font-size: 12px; 
-        font-weight: 500;
-        text-align: center;
-        padding-top: 8px;
-        border-top: 1px solid #eee;
-      ">
+      <div class="going-bananas-expand-hint">
         Click to expand details →
       </div>
     `;
@@ -403,47 +544,25 @@ class TermsAnalyzer {
     const detailedHtml = this.buildDetailedAnalysisDisplay(analysis);
     
     notification.innerHTML = `
-      <div style="margin-bottom: 12px;">
+      <div class="going-bananas-detail-header">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div style="font-weight: 600; color: #1a1a1a;">
+          <div class="going-bananas-detail-title">
             🍌 Terms Analysis Details
           </div>
-          <button style="
-            background: none; 
-            border: none; 
-            font-size: 16px; 
-            cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-          " onclick="this.parentElement.parentElement.parentElement.click()">×</button>
+          <button class="going-bananas-close-button" onclick="this.parentElement.parentElement.parentElement.click()">×</button>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-          <span style="font-weight: 500; color: ${riskColor};">
+        <div class="going-bananas-detail-meta">
+          <span class="going-bananas-risk-level" style="color: ${riskColor};">
             ${analysis.risk_level ? analysis.risk_level.toUpperCase() : 'UNKNOWN'} Risk
           </span>
-          <span style="
-            background: ${riskColor}; 
-            color: white; 
-            padding: 2px 8px; 
-            border-radius: 12px; 
-            font-size: 12px; 
-            font-weight: 600;
-          ">
+          <span class="going-bananas-risk-score" style="background: ${riskColor};">
             ${riskScore}/10
           </span>
           ${confidenceHtml}
         </div>
       </div>
       ${detailedHtml}
-      <div style="
-        color: #007bff; 
-        font-size: 12px; 
-        font-weight: 500;
-        text-align: center;
-        padding-top: 8px;
-        border-top: 1px solid #eee;
-        cursor: pointer;
-      " onclick="event.stopPropagation();">
+      <div class="going-bananas-collapse-hint" onclick="event.stopPropagation();">
         Click to collapse ↑
       </div>
     `;
@@ -461,36 +580,22 @@ class TermsAnalyzer {
     const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
     
     notification.innerHTML = `
-      <div style="margin-bottom: 12px;">
-        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+      <div class="going-bananas-result-header">
+        <div class="going-bananas-result-title">
           🍌 Terms Analysis Complete
         </div>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-          <span style="font-weight: 500; color: ${riskColor};">
+        <div class="going-bananas-result-meta">
+          <span class="going-bananas-risk-level" style="color: ${riskColor};">
             ${analysis.risk_level ? analysis.risk_level.toUpperCase() : 'UNKNOWN'} Risk
           </span>
-          <span style="
-            background: ${riskColor}; 
-            color: white; 
-            padding: 2px 8px; 
-            border-radius: 12px; 
-            font-size: 12px; 
-            font-weight: 600;
-          ">
+          <span class="going-bananas-risk-score" style="background: ${riskColor};">
             ${riskScore}/10
           </span>
           ${confidenceHtml}
         </div>
       </div>
       ${categoriesHtml}
-      <div style="
-        color: #007bff; 
-        font-size: 12px; 
-        font-weight: 500;
-        text-align: center;
-        padding-top: 8px;
-        border-top: 1px solid #eee;
-      ">
+      <div class="going-bananas-expand-hint">
         Click to expand details →
       </div>
     `;
@@ -725,7 +830,7 @@ class TermsAnalyzer {
   }
 
   private hideExistingNotifications(): void {
-    const existing = document.querySelectorAll('#going-bananas-loading, #going-bananas-result');
+    const existing = document.querySelectorAll('#going-bananas-loading, #going-bananas-result, #going-bananas-pdf-notification');
     existing.forEach(el => el.remove());
   }
 
@@ -746,11 +851,15 @@ class TermsAnalyzer {
       'legal', 'tos', 'eula', 'license', 'user-agreement'
     ];
 
-    return termsKeywords.some(keyword => 
-      url.includes(keyword) || 
-      title.includes(keyword) || 
-      pathname.includes(keyword)
-    ) || this.hasTermsContent();
+    // Use word boundary matching for URL and pathname to avoid false positives
+    const urlMatches = termsKeywords.some(keyword => {
+      const regex = new RegExp(`\\b${keyword}\\b|[/-]${keyword}([/-]|$)`);
+      return regex.test(url) || regex.test(pathname);
+    });
+
+    return urlMatches || 
+           termsKeywords.some(keyword => title.includes(keyword)) || 
+           this.hasTermsContent();
   }
 
   private hasTermsContent(): boolean {
