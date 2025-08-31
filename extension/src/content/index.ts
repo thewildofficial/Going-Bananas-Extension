@@ -147,15 +147,15 @@ class TermsAnalyzer {
 
       if (result.success) {
         console.log('✅ Analysis complete:', result.analysis);
-        this.hideLoadingNotification();
         return result.analysis;
       } else {
         throw new Error(result.error || 'Analysis failed');
       }
     } catch (error) {
       console.error('❌ Failed to call API directly:', error);
-      this.hideLoadingNotification();
       throw error;
+    } finally {
+      this.hideLoadingNotification();
     }
   }
 
