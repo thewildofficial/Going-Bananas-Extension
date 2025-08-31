@@ -82,26 +82,77 @@ class TermsAnalyzer {
     }
   }
 
+  private isPdf(): boolean {
+    return this.currentUrl.toLowerCase().endsWith('.pdf');
+  }
+
+  private isTermsPageByUrl(): boolean {
+    const url = this.currentUrl.toLowerCase();
+    const keywords = ['terms', 'privacy', 'policy', 'agreement', 'legal', 'tos', 'eula'];
+    const subdomains = ['legal', 'terms', 'privacy'];
+
+    // Check for keywords in the path
+    if (keywords.some(keyword => url.includes(`/${keyword}`))) {
+      return true;
+    }
+
+    // Check for subdomains
+    const hostname = new URL(url).hostname;
+    if (subdomains.some(subdomain => hostname.startsWith(`${subdomain}.`))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private isTermsPageByContent(): boolean {
+    const title = document.title.toLowerCase();
+    const headings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
+    const keywords = ['terms of service', 'privacy policy', 'user agreement', 'terms and conditions'];
+
+    if (keywords.some(keyword => title.includes(keyword))) {
+      return true;
+    }
+
+    for (const heading of headings) {
+      if (keywords.some(keyword => heading.includes(keyword))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private async autoDetectTerms(): Promise<void> {
-    console.log(`🔍 Auto-detecting terms on: ${this.currentUrl}`);
-    
-    const extractedText = this.extractPageContent();
-    
-    if (extractedText && extractedText.length > 100) {
-      console.log(`📄 Extracted ${extractedText.split(' ').length} words of text for analysis`);
-      this.showLoadingNotification();
+    if (this.isPdf()) {
+      // TODO: Implement PDF parsing
+      console.log('📄 PDF file detected. PDF parsing is not yet implemented.');
+      this.showPdfNotification(); // New notification for PDFs
+      return;
+    }
+
+    if (this.isTermsPageByUrl() || this.isTermsPageByContent()) {
+      console.log(`🔍 Terms page detected on: ${this.currentUrl}`);
+      const extractedText = this.extractPageContent();
       
-      try {
-        const analysis = await this.sendForAutoAnalysis(extractedText);
-        if (analysis) {
-          this.showAnalysisNotification(analysis);
+      if (extractedText && extractedText.length > 100) {
+        console.log(`📄 Extracted ${extractedText.split(' ').length} words of text for analysis`);
+        this.showLoadingNotification();
+        
+        try {
+          const analysis = await this.sendForAutoAnalysis(extractedText);
+          if (analysis) {
+            this.showAnalysisNotification(analysis);
+          }
+        } catch (error) {
+          console.error('Auto-analysis failed:', error);
+          this.hideLoadingNotification();
         }
-      } catch (error) {
-        console.error('Auto-analysis failed:', error);
-        this.hideLoadingNotification();
+      } else {
+        console.log('❌ No sufficient content found for analysis');
       }
     } else {
-      console.log('❌ No sufficient content found for analysis');
+      console.log('✅ Not a terms page. No automatic analysis will be performed.');
     }
   }
 
@@ -156,6 +207,49 @@ class TermsAnalyzer {
       throw error;
     } finally {
       this.hideLoadingNotification();
+    }
+  }
+
+  private showPdfNotification(): void {
+    this.hideExistingNotifications();
+    
+    const notification = document.createElement('div');
+    notification.id = 'going-bananas-pdf-notification';
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ffc107;
+      color: #333;
+      padding: 16px 20px;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      z-index: 10001;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+    `;
+    notification.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span>🍌 PDF detected. Manual analysis is required.</span>
+        <button id="going-bananas-pdf-analyze" style="background: #333; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer;">Analyze</button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+
+    const analyzeButton = document.getElementById('going-bananas-pdf-analyze');
+    if (analyzeButton) {
+      analyzeButton.addEventListener('click', async () => {
+        this.hideExistingNotifications();
+        this.showLoadingNotification();
+        // This will fail because we can't extract text from the PDF.
+        // This is a placeholder for future implementation.
+        const analysis = await this.sendForAutoAnalysis("This is a PDF document. Text extraction is not yet implemented.");
+        if (analysis) {
+          this.showAnalysisNotification(analysis);
+        }
+      });
     }
   }
 
@@ -725,7 +819,7 @@ class TermsAnalyzer {
   }
 
   private hideExistingNotifications(): void {
-    const existing = document.querySelectorAll('#going-bananas-loading, #going-bananas-result');
+    const existing = document.querySelectorAll('#going-bananas-loading, #going-bananas-result, #going-bananas-pdf-notification');
     existing.forEach(el => el.remove());
   }
 
