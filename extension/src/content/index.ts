@@ -161,48 +161,58 @@ class TermsAnalyzer {
 
   private showLoadingNotification(): void {
     this.hideExistingNotifications();
-    
-    const notification = document.createElement('div');
-    notification.id = 'going-bananas-loading';
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 16px 20px;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-      z-index: 10001;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.2);
-    `;
-    notification.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="
-          width: 20px; 
-          height: 20px; 
+
+    // Inject notification styles only once
+    if (!this.hasInjectedStyles) {
+      const style = document.createElement('style');
+      style.textContent = `
+        .going-bananas-notification {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 16px 20px;
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          z-index: 10001;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,255,255,0.2);
+        }
+        .going-bananas-notification-content {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .going-bananas-spinner {
+          width: 20px;
+          height: 20px;
           border: 2px solid transparent;
           border-top: 2px solid white;
           border-radius: 50%;
-          animation: spin 1s linear infinite;
-        "></div>
+          animation: going-bananas-spin 1s linear infinite;
+        }
+        @keyframes going-bananas-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+      this.hasInjectedStyles = true;
+    }
+
+    const notification = document.createElement('div');
+    notification.id = 'going-bananas-loading';
+    notification.className = 'going-bananas-notification';
+    notification.innerHTML = `
+      <div class="going-bananas-notification-content">
+        <div class="going-bananas-spinner"></div>
         <span>🍌 Analyzing terms & conditions...</span>
       </div>
     `;
-    
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(style);
-    
     document.body.appendChild(notification);
   }
 
