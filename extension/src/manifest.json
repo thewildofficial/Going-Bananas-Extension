@@ -5,12 +5,12 @@
   "description": "AI-powered terms and conditions analyzer built with React and TypeScript",
   "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": [
-    "http://localhost:3000/*",
     "http://localhost:3001/*",
     "https://api.goingbananas.dev/*",
     "http://*/*",
     "https://*/*"
   ],
+  
   "background": {
     "service_worker": "background/background.js"
   },

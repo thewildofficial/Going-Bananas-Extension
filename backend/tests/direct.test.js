@@ -1,4 +1,6 @@
 // Direct test of analysis service
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, './.env') });
 const AnalysisService = require('./services/analysisService');
 const GeminiService = require('./services/geminiService');
 

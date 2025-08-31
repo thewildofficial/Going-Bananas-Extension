@@ -22,9 +22,9 @@ class PersonalizationService {
   constructor() {
     this.computationWeights = this.initializeComputationWeights();
     this.profiles = new Map(); // In-memory storage for testing
-    if (process.env.NODE_ENV !== 'test') {
-      this.connectDB();
-    }
+    // if (process.env.NODE_ENV !== 'test') {
+    //   this.connectDB();
+    // }
   }
 
   async connectDB() {
@@ -33,7 +33,6 @@ class PersonalizationService {
       logger.info('MongoDB connected successfully');
     } catch (error) {
       logger.error('MongoDB connection failed:', error.message);
-      process.exit(1);
     }
   }
 
