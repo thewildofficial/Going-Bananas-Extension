@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { RiskScore } from '@/components/RiskScore';
 import { KeyPoints } from '@/components/KeyPoints';
-import { Settings, RefreshCw, Search, Share } from 'lucide-react';
+import { Settings, RefreshCw, Search, Share, Edit3 } from 'lucide-react';
 
 export const Popup: React.FC = () => {
   const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
@@ -10,6 +10,8 @@ export const Popup: React.FC = () => {
   const [termsPages, setTermsPages] = useState<{ found: boolean; links: Array<{ text: string; url: string; type: string }> } | null>(null);
   const [selectedTermsContent, setSelectedTermsContent] = useState<string | null>(null);
   const [loadingTermsContent, setLoadingTermsContent] = useState<string | null>(null);
+  const [toolbarActive, setToolbarActive] = useState(false);
+  const [selectedText, setSelectedText] = useState<string>('');
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -74,6 +76,100 @@ export const Popup: React.FC = () => {
     }
   };
 
+  const toggleToolbar = () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        if (!toolbarActive) {
+          // Inject and show toolbar
+          chrome.tabs.sendMessage(tabs[0].id, { action: "showToolbar" }, (response) => {
+            if (response && response.success) {
+              setToolbarActive(true);
+            }
+          });
+        } else {
+          // Hide toolbar
+          chrome.tabs.sendMessage(tabs[0].id, { action: "hideToolbar" }, (response) => {
+            if (response && response.success) {
+              setToolbarActive(false);
+              setSelectedText('');
+            }
+          });
+        }
+      }
+    });
+  };
+
+  const analyzeSelectedText = async () => {
+    if (!selectedText.trim()) {
+      alert('Please select some text first!');
+      return;
+    }
+
+    try {
+      console.log('Analyzing selected text:', selectedText.substring(0, 100) + '...');
+      
+      // Get current tab URL for context
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentUrl = tabs[0]?.url || 'unknown';
+      
+      const response = await fetch('http://localhost:3000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: selectedText,
+          url: currentUrl,
+          options: {
+            language: 'english',
+            detail_level: 'comprehensive',
+            categories: ['privacy', 'data-collection', 'user-rights', 'terms-of-service', 'liability', 'termination'],
+            focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices'],
+            output_format: 'structured',
+            include_recommendations: true,
+            risk_assessment: true
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Analysis failed with status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Selected text analysis result:', result);
+      
+      // Force update the analysis data by calling analyzeCurrentPage with the result
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { 
+            action: "updateAnalysisResult", 
+            data: result
+          });
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error analyzing selected text:', error);
+      alert(`Failed to analyze selected text: ${error}`);
+    }
+  };
+
+  // Listen for selected text updates
+  useEffect(() => {
+    const messageListener = (message: any) => {
+      if (message.action === 'textSelected') {
+        setSelectedText(message.text);
+      } else if (message.action === 'toolbarClosed') {
+        setToolbarActive(false);
+        setSelectedText('');
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageListener);
+    return () => chrome.runtime.onMessage.removeListener(messageListener);
+  }, []);
+
   return (
     <div className="w-80 h-96 bg-gradient-to-br from-purple-600 to-blue-600 overflow-hidden">
       <div className="bg-gradient-to-r from-orange-400 to-pink-500 p-4 text-white">
@@ -82,13 +178,58 @@ export const Popup: React.FC = () => {
             <span className="text-2xl">🍌</span>
             <h1 className="font-bold text-lg">Going Bananas</h1>
           </div>
-          <button
-            onClick={handleSettings}
-            className="p-2 hover:bg-white/20 rounded-full transition-colors"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleToolbar}
+              className={`p-2 rounded-full transition-colors ${
+                toolbarActive 
+                  ? 'bg-white/30 text-white' 
+                  : 'hover:bg-white/20'
+              }`}
+              title={toolbarActive ? 'Hide Text Selector' : 'Show Text Selector'}
+            >
+              <Edit3 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleSettings}
+              className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Toolbar Status and Selected Text Display */}
+        {toolbarActive && (
+          <div className="mt-3 p-3 bg-white/20 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Text Selector Active</span>
+              <span className="text-xs bg-white/20 px-2 py-1 rounded">
+                {selectedText ? `${selectedText.length} chars` : 'No text selected'}
+              </span>
+            </div>
+            
+            {selectedText && (
+              <div className="space-y-2">
+                <div className="text-xs bg-white/10 p-2 rounded max-h-16 overflow-y-auto">
+                  "{selectedText.substring(0, 100)}{selectedText.length > 100 ? '...' : ''}"
+                </div>
+                <button
+                  onClick={analyzeSelectedText}
+                  className="w-full py-2 px-3 bg-white text-purple-600 rounded hover:bg-gray-100 transition-colors text-sm font-medium"
+                >
+                  Analyze Selected Text
+                </button>
+              </div>
+            )}
+            
+            {!selectedText && (
+              <div className="text-xs text-white/80">
+                💡 Select any text on the page to analyze it
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <p>{content}</p>
       

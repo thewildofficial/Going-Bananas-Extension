@@ -65,6 +65,30 @@ class TermsAnalyzer {
           sendResponse({ success: true, message: 'Auto-analysis triggered' });
           break;
 
+        case 'showToolbar':
+          this.showTextSelectionToolbar();
+          sendResponse({ success: true, message: 'Toolbar activated' });
+          break;
+
+        case 'hideToolbar':
+          this.hideTextSelectionToolbar();
+          sendResponse({ success: true, message: 'Toolbar deactivated' });
+          break;
+
+        case 'getSelectedText':
+          const selectedText = this.getSelectedText();
+          sendResponse({ success: true, selectedText: selectedText });
+          break;
+
+        case 'updateAnalysisResult':
+          if (message.data) {
+            this.showAnalysisNotification(message.data);
+            sendResponse({ success: true, message: 'Analysis result updated' });
+          } else {
+            sendResponse({ success: false, error: 'No analysis data provided' });
+          }
+          break;
+
         default:
           sendResponse({
             success: false,
@@ -1152,6 +1176,133 @@ class TermsAnalyzer {
       analysis_time: Date.now(),
       mock: true
     };
+  }
+
+  // Text Selection Toolbar Methods
+  private showTextSelectionToolbar(): void {
+    console.log('📝 Activating text selection toolbar');
+    this.createToolbarIfNotExists();
+    this.attachSelectionListeners();
+    
+    // Show the toolbar
+    const toolbar = document.getElementById('going-bananas-toolbar');
+    if (toolbar) {
+      toolbar.style.display = 'block';
+      toolbar.style.opacity = '1';
+    }
+  }
+
+  private hideTextSelectionToolbar(): void {
+    console.log('📝 Deactivating text selection toolbar');
+    this.removeSelectionListeners();
+    
+    // Hide the toolbar
+    const toolbar = document.getElementById('going-bananas-toolbar');
+    if (toolbar) {
+      toolbar.style.display = 'none';
+    }
+  }
+
+  private createToolbarIfNotExists(): void {
+    let toolbar = document.getElementById('going-bananas-toolbar');
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.id = 'going-bananas-toolbar';
+      toolbar.innerHTML = `
+        <div style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 999999;
+          background: linear-gradient(135deg, #ff8a00, #e52e71);
+          color: white;
+          padding: 8px 16px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 14px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+          border-bottom: 2px solid rgba(255,255,255,0.2);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        ">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 18px;">🍌</span>
+            <span style="font-weight: 600;">Text Selector Active</span>
+            <span id="selected-text-info" style="
+              background: rgba(255,255,255,0.2);
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 12px;
+            ">Select text to analyze</span>
+          </div>
+          <button id="close-toolbar-btn" style="
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+          ">Close</button>
+        </div>
+      `;
+      
+      document.body.appendChild(toolbar);
+      
+      // Add close button functionality
+      const closeBtn = toolbar.querySelector('#close-toolbar-btn');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          this.hideTextSelectionToolbar();
+          // Notify popup that toolbar was closed
+          chrome.runtime.sendMessage({ action: 'toolbarClosed' });
+        });
+      }
+      
+      // Adjust page content to account for toolbar
+      document.body.style.paddingTop = '48px';
+    }
+  }
+
+  private attachSelectionListeners(): void {
+    document.addEventListener('mouseup', this.handleTextSelection.bind(this));
+    document.addEventListener('keyup', this.handleTextSelection.bind(this));
+  }
+
+  private removeSelectionListeners(): void {
+    document.removeEventListener('mouseup', this.handleTextSelection.bind(this));
+    document.removeEventListener('keyup', this.handleTextSelection.bind(this));
+    
+    // Reset page padding
+    document.body.style.paddingTop = '';
+  }
+
+  private handleTextSelection(): void {
+    const selectedText = this.getSelectedText();
+    const infoElement = document.getElementById('selected-text-info');
+    
+    if (infoElement) {
+      if (selectedText && selectedText.length > 0) {
+        infoElement.textContent = `${selectedText.length} characters selected`;
+        infoElement.style.background = 'rgba(255,255,255,0.3)';
+        
+        // Send selected text to popup
+        chrome.runtime.sendMessage({ 
+          action: 'textSelected', 
+          text: selectedText 
+        });
+      } else {
+        infoElement.textContent = 'Select text to analyze';
+        infoElement.style.background = 'rgba(255,255,255,0.2)';
+      }
+    }
+  }
+
+  private getSelectedText(): string {
+    const selection = window.getSelection();
+    return selection ? selection.toString().trim() : '';
   }
 }
 
