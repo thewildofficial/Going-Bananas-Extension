@@ -42,13 +42,14 @@ const analyzeSchema = Joi.object({
     documentType: Joi.string().valid('privacy_policy', 'terms_of_service', 'user_agreement', 'eula', 'cookie_policy').optional(),
     jurisdiction: Joi.string().optional()
   }).default({})
-});
+}).unknown(true);
 
 /**
  * POST /analyze
  * Analyze terms and conditions text
  */
 router.post('/', async (req, res) => {
+  logger.debug('Request Body:', req.body);
   const startTime = Date.now();
   
   try {
@@ -67,7 +68,7 @@ router.post('/', async (req, res) => {
 
         const { text, url, userId, sessionId, options } = validatedData;
 
-    console.log('🔍 ANALYSIS REQUEST RECEIVED:', {
+    logger.debug('🔍 ANALYSIS REQUEST RECEIVED:', {
       textLength: text.length,
       multiPass: options.multiPass,
       contextAware: options.contextAware,
@@ -170,13 +171,10 @@ router.post('/', async (req, res) => {
     });
 
     // Debug: Check if major_clauses is present
-    console.log('🔍 Analysis object has major_clauses:', !!analysis.major_clauses);
+    logger.debug('🔍 Analysis object has major_clauses:', !!analysis.major_clauses);
     if (analysis.major_clauses) {
-      console.log('📊 Major clauses count:', analysis.major_clauses.clauses?.length || 0);
+      logger.debug('📊 Major clauses count:', analysis.major_clauses.clauses?.length || 0);
     }
-
-    // Also log to file for debugging
-    require('fs').appendFileSync('/tmp/debug.log', `Analysis has major_clauses: ${!!analysis.major_clauses}\n`);
 
     // Return successful response
     res.json({

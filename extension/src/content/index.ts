@@ -1,3 +1,5 @@
+import { getApiUrl } from '../utils/config';
+
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
@@ -20,11 +22,9 @@ class TermsAnalyzer {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         this.autoDetectTerms();
-        this.initSentenceInteractions();
       });
     } else {
       this.autoDetectTerms();
-      this.initSentenceInteractions();
     }
 
     console.log('Going Bananas T&C Analyzer initialized (TypeScript)');
@@ -62,8 +62,9 @@ class TermsAnalyzer {
           break;
 
         case 'autoAnalyze':
-          const auto = await this.analyzeCurrentPage();
-          sendResponse({ success: true, analysis: auto });
+          console.log('🎯 Received autoAnalyze message');
+          await this.autoDetectTerms();
+          sendResponse({ success: true, message: 'Auto-analysis triggered' });
           break;
 
         default:
@@ -82,10 +83,657 @@ class TermsAnalyzer {
   }
 
   private async autoDetectTerms(): Promise<void> {
-    if (this.isTermsPage()) {
-      console.log('Terms page detected, starting analysis...');
-      await this.analyzeCurrentPage();
+    console.log(`🔍 Auto-detecting terms on: ${this.currentUrl}`);
+    
+    const extractedText = this.extractPageContent();
+    
+    if (extractedText && extractedText.length > 100) {
+      console.log(`📄 Extracted ${extractedText.split(' ').length} words of text for analysis`);
+      this.showLoadingNotification();
+      
+      try {
+        const analysis = await this.sendForAutoAnalysis(extractedText);
+        if (analysis) {
+          this.showAnalysisNotification(analysis);
+        }
+      } catch (error) {
+        console.error('Auto-analysis failed:', error);
+        this.hideLoadingNotification();
+      }
+    } else {
+      console.log('❌ No sufficient content found for analysis');
     }
+  }
+
+  private async sendForAutoAnalysis(text: string): Promise<any> {
+    console.log('🚀 Sending text for analysis directly to API...');
+    
+    try {
+      const apiUrl = await getApiUrl();
+      const payload = {
+        text: text,
+        url: this.currentUrl,
+        options: {
+          language: 'en',
+          detail_level: 'standard',
+          cache: false,
+          categories: ['privacy', 'liability', 'termination', 'payment'],
+          multiPass: false,
+          streaming: false,
+          contextAware: false
+        }
+      };
+
+      console.log('📤 API Payload:', { textLength: payload.text.length, url: payload.url });
+      
+      const response = await fetch(`${apiUrl}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log('📡 API Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API request failed:', response.status, errorText);
+        throw new Error(`API request failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('📥 API Response:', result);
+
+      if (result.success) {
+        console.log('✅ Analysis complete:', result.analysis);
+        return result.analysis;
+      } else {
+        throw new Error(result.error || 'Analysis failed');
+      }
+    } catch (error) {
+      console.error('❌ Failed to call API directly:', error);
+      throw error;
+    } finally {
+      this.hideLoadingNotification();
+    }
+  }
+
+  private showLoadingNotification(): void {
+    this.hideExistingNotifications();
+
+    // Inject notification styles only once
+    if (!this.hasInjectedStyles) {
+      const style = document.createElement('style');
+      style.textContent = `
+        .going-bananas-notification {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 16px 20px;
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          z-index: 10001;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,255,255,0.2);
+        }
+        .going-bananas-notification-content {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .going-bananas-spinner {
+          width: 20px;
+          height: 20px;
+          border: 2px solid transparent;
+          border-top: 2px solid white;
+          border-radius: 50%;
+          animation: going-bananas-spin 1s linear infinite;
+        }
+        @keyframes going-bananas-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+      this.hasInjectedStyles = true;
+    }
+
+    const notification = document.createElement('div');
+    notification.id = 'going-bananas-loading';
+    notification.className = 'going-bananas-notification';
+    notification.innerHTML = `
+      <div class="going-bananas-notification-content">
+        <div class="going-bananas-spinner"></div>
+        <span>🍌 Analyzing terms & conditions...</span>
+      </div>
+    `;
+    document.body.appendChild(notification);
+  }
+
+  private hideLoadingNotification(): void {
+    const loading = document.getElementById('going-bananas-loading');
+    if (loading) {
+      loading.remove();
+    }
+  }
+
+  private showAnalysisNotification(analysis: any): void {
+    this.hideExistingNotifications();
+    
+    const riskColor = this.getRiskColor(analysis.risk_level);
+    const riskScore = Math.round(analysis.risk_score || 5);
+    
+    const notification = document.createElement('div');
+    notification.id = 'going-bananas-result';
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: white;
+      color: #333;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      z-index: 10001;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      max-width: 300px;
+      border-left: 4px solid ${riskColor};
+      cursor: pointer;
+      transition: all 0.3s ease;
+    `;
+    
+    const categories = analysis.categories || {};
+    const categoriesHtml = this.buildCategoriesDisplay(categories);
+    const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
+    
+    notification.innerHTML = `
+      <div style="margin-bottom: 12px;">
+        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+          🍌 Terms Analysis Complete
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <span style="font-weight: 500; color: ${riskColor};">
+            ${analysis.risk_level ? analysis.risk_level.toUpperCase() : 'UNKNOWN'} Risk
+          </span>
+          <span style="
+            background: ${riskColor}; 
+            color: white; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+            font-weight: 600;
+          ">
+            ${riskScore}/10
+          </span>
+          ${confidenceHtml}
+        </div>
+      </div>
+      ${categoriesHtml}
+      <div style="
+        color: #007bff; 
+        font-size: 12px; 
+        font-weight: 500;
+        text-align: center;
+        padding-top: 8px;
+        border-top: 1px solid #eee;
+      ">
+        Click to expand details →
+      </div>
+    `;
+    
+    let isExpanded = false;
+    
+    notification.addEventListener('click', () => {
+      if (!isExpanded) {
+        this.expandNotification(notification, analysis);
+        isExpanded = true;
+      } else {
+        this.collapseNotification(notification, analysis);
+        isExpanded = false;
+      }
+    });
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      if (notification.parentNode && !isExpanded) {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+      }
+    }, 12000);
+  }
+
+  private buildCategoriesDisplay(categories: any): string {
+    if (!categories || typeof categories !== 'object') {
+      return '<div style="color: #666; font-size: 12px; text-align: center; padding: 8px;">No category details available</div>';
+    }
+
+    const categoryOrder = ['privacy', 'liability', 'payment', 'termination'];
+    let html = '<div style="margin: 8px 0;">';
+    
+    for (const category of categoryOrder) {
+      const categoryData = categories[category];
+      if (categoryData && typeof categoryData === 'object') {
+        const score = Math.round(categoryData.score || 0);
+        const riskColor = this.getCategoryRiskColor(score);
+        
+        html += `
+          <div style="
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin: 4px 0;
+            padding: 4px 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            font-size: 12px;
+          ">
+            <span style="text-transform: capitalize; font-weight: 500;">
+              ${category}
+            </span>
+            <span style="
+              color: ${riskColor}; 
+              font-weight: 600;
+              font-size: 11px;
+            ">
+              ${score}/10
+            </span>
+          </div>
+        `;
+      }
+    }
+    
+    html += '</div>';
+    return html;
+  }
+
+  private getCategoryRiskColor(score: number): string {
+    if (score >= 7) return '#dc3545';
+    if (score >= 4) return '#ffc107';
+    return '#28a745';
+  }
+
+  private createConfidenceHtml(confidence: any): string {
+    const confidenceValue = parseFloat(confidence);
+    if (isNaN(confidenceValue)) {
+      return '';
+    }
+    const confidencePercentage = Math.round(confidenceValue * 100);
+    return `<span style="color: #666; font-size: 11px;">${confidencePercentage}% confidence</span>`;
+  }
+
+  private createDetailedConfidenceHtml(confidence: any): string {
+    const confidenceValue = parseFloat(confidence);
+    if (isNaN(confidenceValue)) {
+      return '';
+    }
+    const confidencePercentage = Math.round(confidenceValue * 100);
+    return `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            🎯 Analysis Confidence
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; height: 8px; background: #e9ecef; border-radius: 4px;">
+              <div style="height: 100%; background: #28a745; border-radius: 4px; width: ${confidencePercentage}%;"></div>
+            </div>
+            <span style="font-size: 12px; font-weight: 600; color: #28a745;">${confidencePercentage}%</span>
+          </div>
+        </div>
+      `;
+  }
+
+  private expandNotification(notification: HTMLElement, analysis: any): void {
+    notification.style.maxWidth = '450px';
+    notification.style.maxHeight = '80vh';
+    notification.style.overflowY = 'auto';
+    
+    const riskColor = this.getRiskColor(analysis.risk_level);
+    const riskScore = Math.round(analysis.risk_score || 5);
+    const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
+    
+    const detailedHtml = this.buildDetailedAnalysisDisplay(analysis);
+    
+    notification.innerHTML = `
+      <div style="margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="font-weight: 600; color: #1a1a1a;">
+            🍌 Terms Analysis Details
+          </div>
+          <button style="
+            background: none; 
+            border: none; 
+            font-size: 16px; 
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+          " onclick="this.parentElement.parentElement.parentElement.click()">×</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+          <span style="font-weight: 500; color: ${riskColor};">
+            ${analysis.risk_level ? analysis.risk_level.toUpperCase() : 'UNKNOWN'} Risk
+          </span>
+          <span style="
+            background: ${riskColor}; 
+            color: white; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+            font-weight: 600;
+          ">
+            ${riskScore}/10
+          </span>
+          ${confidenceHtml}
+        </div>
+      </div>
+      ${detailedHtml}
+      <div style="
+        color: #007bff; 
+        font-size: 12px; 
+        font-weight: 500;
+        text-align: center;
+        padding-top: 8px;
+        border-top: 1px solid #eee;
+        cursor: pointer;
+      " onclick="event.stopPropagation();">
+        Click to collapse ↑
+      </div>
+    `;
+  }
+
+  private collapseNotification(notification: HTMLElement, analysis: any): void {
+    notification.style.maxWidth = '300px';
+    notification.style.maxHeight = 'auto';
+    notification.style.overflowY = 'visible';
+    
+    const riskColor = this.getRiskColor(analysis.risk_level);
+    const riskScore = Math.round(analysis.risk_score || 5);
+    const categories = analysis.categories || {};
+    const categoriesHtml = this.buildCategoriesDisplay(categories);
+    const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
+    
+    notification.innerHTML = `
+      <div style="margin-bottom: 12px;">
+        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+          🍌 Terms Analysis Complete
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <span style="font-weight: 500; color: ${riskColor};">
+            ${analysis.risk_level ? analysis.risk_level.toUpperCase() : 'UNKNOWN'} Risk
+          </span>
+          <span style="
+            background: ${riskColor}; 
+            color: white; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+            font-weight: 600;
+          ">
+            ${riskScore}/10
+          </span>
+          ${confidenceHtml}
+        </div>
+      </div>
+      ${categoriesHtml}
+      <div style="
+        color: #007bff; 
+        font-size: 12px; 
+        font-weight: 500;
+        text-align: center;
+        padding-top: 8px;
+        border-top: 1px solid #eee;
+      ">
+        Click to expand details →
+      </div>
+    `;
+  }
+
+  private buildDetailedAnalysisDisplay(analysis: any): string {
+    let html = '';
+    
+    if (analysis.summary) {
+      html += `
+        <div style="margin-bottom: 16px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            📋 Summary
+          </div>
+          <div style="color: #333; font-size: 12px; line-height: 1.4; padding: 8px; background: #f8f9fa; border-radius: 6px;">
+            ${analysis.summary}
+          </div>
+        </div>
+      `;
+    }
+    
+    if (analysis.categories) {
+      html += this.buildDetailedCategoriesDisplay(analysis.categories);
+    }
+
+    if (analysis.major_clauses && analysis.major_clauses.clauses) {
+      html += `
+        <div style="margin-bottom: 16px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            ⚖️ Major Clauses
+          </div>
+          <div style="font-size: 12px;">
+            ${analysis.major_clauses.clauses.map((clause: any) => {
+              const riskColor = this.getRiskColor(clause.risk_level);
+              return `
+                <div style="margin: 6px 0; padding: 8px; background: #f8f9fa; border-left: 3px solid ${riskColor}; border-radius: 4px;">
+                  <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${clause.title}</div>
+                  <div style="color: #666; font-size: 11px; line-height: 1.3; margin-bottom: 4px;">${clause.description}</div>
+                  <div style="display: flex; gap: 8px; font-size: 10px;">
+                    <span style="background: ${riskColor}; color: white; padding: 2px 6px; border-radius: 8px;">${clause.risk_level}</span>
+                    <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">${clause.importance}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    if (analysis.key_points && Array.isArray(analysis.key_points)) {
+      html += `
+        <div style="margin-bottom: 16px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            🔑 Key Points
+          </div>
+          <div style="font-size: 12px;">
+            ${analysis.key_points.map((point: string) => `
+              <div style="margin: 4px 0; padding: 6px 8px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px;">
+                • ${point}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    if (analysis.insights) {
+      html += this.buildInsightsDisplay(analysis.insights);
+    }
+    
+    if (analysis.confidence !== undefined) {
+      html += this.createDetailedConfidenceHtml(analysis.confidence);
+    }
+    
+    if (analysis.mock !== undefined || analysis.analysis_time) {
+      html += `
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+          <div style="font-size: 10px; color: #999; text-align: center;">
+            ${analysis.mock ? '🔧 Mock Data' : '✅ Live Analysis'} 
+            ${analysis.analysis_time ? `• ${new Date(analysis.analysis_time).toLocaleTimeString()}` : ''}
+            ${analysis.word_count ? `• ${analysis.word_count} words` : ''}
+          </div>
+        </div>
+      `;
+    }
+    
+    return html;
+  }
+
+  private buildInsightsDisplay(insights: any): string {
+    if (!insights || typeof insights !== 'object') {
+      return '';
+    }
+
+    let html = `
+      <div style="margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+          💡 Insights & Recommendations
+        </div>
+    `;
+
+    if (insights.recommendations && Array.isArray(insights.recommendations)) {
+      html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Recommendations:</div>
+          ${insights.recommendations.map((rec: string) => `
+            <div style="margin: 3px 0; padding: 4px 8px; background: #d1ecf1; border-left: 3px solid #17a2b8; border-radius: 4px; font-size: 11px;">
+              💡 ${rec}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    if (insights.key_risk_factors && Array.isArray(insights.key_risk_factors)) {
+      html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Key Risk Factors:</div>
+          ${insights.key_risk_factors.map((risk: any) => {
+            const riskColor = this.getCategoryRiskColor(risk.score || 5);
+            return `
+              <div style="margin: 3px 0; padding: 4px 8px; background: #f8f9fa; border-left: 3px solid ${riskColor}; border-radius: 4px; font-size: 11px;">
+                ⚠️ <strong>${risk.category}:</strong> ${risk.severity} severity (${risk.score}/10)
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    if (insights.comparative_risk) {
+      html += `
+        <div style="margin-bottom: 8px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Comparative Risk:</div>
+          <div style="padding: 4px 8px; background: #e9ecef; border-radius: 4px; font-size: 11px; color: #495057;">
+            📊 ${insights.comparative_risk}
+          </div>
+        </div>
+      `;
+    }
+
+    if (insights.text_complexity) {
+      html += `
+        <div style="margin-bottom: 8px;">
+          <div style="font-weight: 500; color: #495057; margin-bottom: 4px; font-size: 12px;">Text Complexity:</div>
+          <div style="display: flex; gap: 8px; font-size: 10px;">
+            <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">
+              ${insights.text_complexity.level}
+            </span>
+            <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">
+              ${insights.text_complexity.sentence_count} sentences
+            </span>
+            <span style="background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 8px;">
+              ${insights.text_complexity.avg_words_per_sentence} avg words/sentence
+            </span>
+          </div>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  private buildDetailedCategoriesDisplay(categories: any): string {
+    if (!categories || typeof categories !== 'object') {
+      return '';
+    }
+
+    const categoryOrder = ['privacy', 'liability', 'payment', 'termination'];
+    let html = `
+      <div style="margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 8px; font-size: 13px;">
+          📊 Risk Categories
+        </div>
+    `;
+    
+    for (const category of categoryOrder) {
+      const categoryData = categories[category];
+      if (categoryData && typeof categoryData === 'object') {
+        const score = Math.round(categoryData.score || 0);
+        const riskColor = this.getCategoryRiskColor(score);
+        
+        html += `
+          <div style="
+            margin: 8px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 3px solid ${riskColor};
+          ">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="text-transform: capitalize; font-weight: 600; font-size: 13px;">
+                ${category}
+              </span>
+              <span style="
+                color: ${riskColor}; 
+                font-weight: 600;
+                font-size: 12px;
+                background: white;
+                padding: 2px 6px;
+                border-radius: 8px;
+              ">
+                ${score}/10
+              </span>
+            </div>
+            ${categoryData.concerns && Array.isArray(categoryData.concerns) ? `
+              <div style="font-size: 11px; color: #666;">
+                <strong>Concerns:</strong>
+                ${categoryData.concerns.map((concern: string) => `
+                  <div style="margin: 2px 0; padding-left: 8px;">• ${concern}</div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+    }
+    
+    html += '</div>';
+    return html;
+  }
+
+  private getRiskColor(riskLevel: string): string {
+    switch (riskLevel?.toLowerCase()) {
+      case 'high': return '#dc3545';
+      case 'medium': return '#ffc107';
+      case 'low': return '#28a745';
+      default: return '#6c757d';
+    }
+  }
+
+  private hideExistingNotifications(): void {
+    const existing = document.querySelectorAll('#going-bananas-loading, #going-bananas-result');
+    existing.forEach(el => el.remove());
+  }
+
+  private openAnalysisPopup(analysis: any): void {
+    chrome.runtime.sendMessage({
+      action: 'openPopup',
+      data: analysis
+    });
   }
 
   private isTermsPage(): boolean {
@@ -296,7 +944,6 @@ class TermsAnalyzer {
   }
 
   private extractPageContent(): string {
-    // Remove unwanted elements
     const elementsToRemove = [
       'script', 'style', 'nav', 'header', 'footer',
       '.navigation', '.menu', '.sidebar', '.ads',
@@ -325,19 +972,39 @@ class TermsAnalyzer {
 
   private async sendForAnalysis(text: string): Promise<any> {
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'analyzeTermsText',
-        data: {
-          text: text,
-          url: this.currentUrl,
-          timestamp: Date.now()
+      const apiUrl = await getApiUrl();
+      const payload = {
+        text: text,
+        url: this.currentUrl,
+        options: {
+          language: 'en',
+          detail_level: 'standard',
+          cache: false,
+          categories: ['privacy', 'liability', 'termination', 'payment'],
+          multiPass: false,
+          streaming: false,
+          contextAware: false
         }
+      };
+
+      const response = await fetch(`${apiUrl}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
-      if (response.success) {
-        return response.analysis;
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        return result.analysis;
       } else {
-        throw new Error(response.error || 'Analysis failed');
+        throw new Error(result.error || 'Analysis failed');
       }
     } catch (error) {
       console.error('Failed to send for analysis:', error);
@@ -359,7 +1026,7 @@ class TermsAnalyzer {
     return {
       risk_score: Math.min(riskScore, 10),
       risk_level: riskLevel,
-      summary: 'Mock analysis completed for development. This service has some concerning clauses that should be reviewed.',
+      summary: 'Mock analysis completed for testing purposes.',
       key_points: [
         'Personal data collection practices identified',
         'Third-party data sharing provisions may apply',
@@ -380,229 +1047,3 @@ class TermsAnalyzer {
 }
 
 new TermsAnalyzer();
-
-interface WrappedSentenceMeta {
-  id: string;
-  text: string;
-}
-
-interface TermsAnalyzer {
-  initSentenceInteractions(): void;
-  injectStyles(): void;
-  findTermsContainer(): Element | null;
-  wrapSentences(container: Element): void;
-  onSentenceClick(event: MouseEvent): void;
-  showTooltip(targetEl: HTMLElement, content: string, isLoading?: boolean): void;
-  hideTooltip(): void;
-  explainSentence(text: string, targetEl: HTMLElement): Promise<void>;
-  showFirstRunGuideIfNeeded(): Promise<void>;
-}
-
-TermsAnalyzer.prototype.initSentenceInteractions = function initSentenceInteractions(this: TermsAnalyzer) {
-  try {
-    this.injectStyles();
-    const container = this.findTermsContainer();
-    if (!container) return;
-    this.wrapSentences(container);
-    this.showFirstRunGuideIfNeeded();
-    // Delegate clicks
-    container.addEventListener('click', (e: Event) => this.onSentenceClick(e as MouseEvent), { capture: false });
-  } catch (e) {
-    console.warn('Sentence interactions unavailable:', e);
-  }
-};
-
-TermsAnalyzer.prototype.injectStyles = function injectStyles(this: TermsAnalyzer) {
-  if (this.hasInjectedStyles) return;
-  const style = document.createElement('style');
-  style.id = 'banana-inline-styles';
-  style.textContent = `
-    .banana-sentence{cursor:pointer;transition:background-color .15s ease;border-radius:4px;padding:0 2px}
-    .banana-sentence:hover{background-color:rgba(255,235,59,.35)}
-    .banana-sentence--selected{background-color:rgba(76,175,80,.25);outline:1px solid rgba(76,175,80,.5)}
-    .banana-tooltip{position:absolute;z-index:2147483647;max-width:360px;background:#111;color:#fff;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);padding:10px 12px;font:13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-    .banana-tooltip .banana-tooltip-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-    .banana-tooltip .banana-badge{background:#6d28d9;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px}
-    .banana-tooltip .banana-actions{display:flex;gap:8px;margin-top:8px}
-    .banana-tooltip button{background:#6d28d9;color:#fff;border:none;border-radius:6px;padding:6px 8px;cursor:pointer}
-    .banana-tooltip .banana-close{background:transparent;color:#bbb}
-    .banana-onboarding{position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
-    .banana-onboarding .banana-card{background:#fff;color:#111;max-width:520px;border-radius:14px;padding:18px 18px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-    .banana-onboarding h3{margin:0 0 6px 0;font-size:18px}
-    .banana-onboarding p{margin:0 0 12px 0;color:#444}
-    .banana-onboarding .banana-cta{display:flex;gap:8px;justify-content:flex-end}
-    .banana-onboarding .banana-cta button{background:#6d28d9;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer}
-    .banana-onboarding .banana-cta .secondary{background:#eee;color:#333}
-  `;
-  document.documentElement.appendChild(style);
-  this.hasInjectedStyles = true;
-};
-
-TermsAnalyzer.prototype.findTermsContainer = function findTermsContainer(): Element | null {
-  const selectors = [
-    'main',
-    '[role="main"]',
-    '.terms-content',
-    '.privacy-content',
-    '.legal-content',
-    'article',
-    '.main-content',
-    '.content'
-  ];
-  for (const sel of selectors) {
-    const el = document.querySelector(sel);
-    if (el && el.textContent && el.textContent.trim().length > 500) {
-      return el;
-    }
-  }
-  // Fallback: large text container
-  return document.body;
-};
-
-TermsAnalyzer.prototype.wrapSentences = function wrapSentences(container: Element) {
-  const disallowedTags = new Set(['SCRIPT','STYLE','NOSCRIPT','AUDIO','VIDEO','BUTTON','A','INPUT','TEXTAREA','SELECT','CODE','PRE','NAV','SVG']);
-  const sentenceRegex = /([^.!?\n\r]+[.!?]+)(\s+|$)/g;
-  let sentenceCount = 0;
-
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
-    acceptNode(node: Node) {
-      const parent = node.parentElement;
-      if (!parent) return NodeFilter.FILTER_REJECT;
-      if (disallowedTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-      const text = node.textContent || '';
-      if (text.trim().length < 40) return NodeFilter.FILTER_REJECT; // skip tiny fragments
-      if (parent.closest('.banana-tooltip, .banana-onboarding')) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    }
-  } as unknown as NodeFilter);
-
-  const toProcess: Text[] = [];
-  let current: Node | null;
-  while ((current = walker.nextNode())) {
-    toProcess.push(current as Text);
-    if (toProcess.length > 2000) break; // safety cap
-  }
-
-  for (const textNode of toProcess) {
-    const text = textNode.textContent || '';
-    const frag = document.createDocumentFragment();
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    sentenceRegex.lastIndex = 0;
-    while ((match = sentenceRegex.exec(text)) && sentenceCount < 5000) {
-      const prefix = text.slice(lastIndex, match.index);
-      if (prefix) frag.appendChild(document.createTextNode(prefix));
-      const sentence = match[1];
-      const span = document.createElement('span');
-      span.className = 'banana-sentence';
-      span.setAttribute('data-banana-sid', `${Date.now()}_${sentenceCount++}`);
-      span.textContent = sentence.trim() + ' ';
-      frag.appendChild(span);
-      lastIndex = sentenceRegex.lastIndex;
-    }
-    const tail = text.slice(lastIndex);
-    if (tail) frag.appendChild(document.createTextNode(tail));
-    textNode.replaceWith(frag);
-    if (sentenceCount >= 5000) break;
-  }
-};
-
-TermsAnalyzer.prototype.onSentenceClick = function onSentenceClick(this: TermsAnalyzer, event: MouseEvent) {
-  const target = event.target as HTMLElement | null;
-  if (!target || !target.classList.contains('banana-sentence')) return;
-
-  if (this.selectedSentenceEl) {
-    this.selectedSentenceEl.classList.remove('banana-sentence--selected');
-  }
-  this.selectedSentenceEl = target;
-  target.classList.add('banana-sentence--selected');
-
-  const text = target.innerText.trim();
-  this.showTooltip(target, 'Explaining…', true);
-  this.explainSentence(text, target);
-};
-
-TermsAnalyzer.prototype.showTooltip = function showTooltip(this: TermsAnalyzer, targetEl: HTMLElement, content: string, isLoading = false) {
-  if (!this.tooltipEl) {
-    this.tooltipEl = document.createElement('div');
-    this.tooltipEl.className = 'banana-tooltip';
-    document.body.appendChild(this.tooltipEl);
-  }
-  this.tooltipEl.innerHTML = `
-    <div class="banana-tooltip-header">
-      <span>🍌</span><strong>Going Bananas</strong>
-      <span class="banana-badge">${isLoading ? 'Thinking' : 'Result'}</span>
-      <button class="banana-close" aria-label="Close">✕</button>
-    </div>
-    <div class="banana-tooltip-content">${content.replace(/</g,'&lt;')}</div>
-    <div class="banana-actions">
-      <button class="banana-copy">Copy</button>
-    </div>
-  `;
-  const closeBtn = this.tooltipEl.querySelector('.banana-close') as HTMLElement | null;
-  if (closeBtn) closeBtn.onclick = () => this.hideTooltip();
-  const copyBtn = this.tooltipEl.querySelector('.banana-copy') as HTMLElement | null;
-  if (copyBtn) copyBtn.onclick = async () => {
-    try { await navigator.clipboard.writeText((this.tooltipEl!.querySelector('.banana-tooltip-content') as HTMLElement).innerText); } catch {}
-  };
-
-  // Position near target
-  const rect = targetEl.getBoundingClientRect();
-  const top = window.scrollY + rect.bottom + 8;
-  const left = window.scrollX + Math.min(rect.left, window.innerWidth - 380);
-  Object.assign(this.tooltipEl.style, { top: `${top}px`, left: `${left}px` });
-};
-
-TermsAnalyzer.prototype.hideTooltip = function hideTooltip(this: TermsAnalyzer) {
-  if (this.tooltipEl && this.tooltipEl.parentElement) {
-    this.tooltipEl.parentElement.removeChild(this.tooltipEl);
-  }
-  this.tooltipEl = null;
-  if (this.selectedSentenceEl) {
-    this.selectedSentenceEl.classList.remove('banana-sentence--selected');
-    this.selectedSentenceEl = null;
-  }
-};
-
-TermsAnalyzer.prototype.explainSentence = async function explainSentence(this: TermsAnalyzer, text: string, targetEl: HTMLElement) {
-  try {
-    const result = await (this as any).sendForAnalysis(text);
-    const summary: string = result?.summary || 'Here’s a plain-English explanation of this sentence.';
-    this.showTooltip(targetEl, summary, false);
-  } catch (e) {
-    this.showTooltip(targetEl, 'Failed to explain. Please try again.', false);
-  }
-};
-
-TermsAnalyzer.prototype.showFirstRunGuideIfNeeded = async function showFirstRunGuideIfNeeded(this: TermsAnalyzer) {
-  if (this.firstRunGuideShown) return;
-  try {
-    const { gb_seen_sentence_guide } = await chrome.storage.local.get('gb_seen_sentence_guide');
-    if (gb_seen_sentence_guide) return;
-  } catch {}
-
-  const overlay = document.createElement('div');
-  overlay.className = 'banana-onboarding';
-  overlay.innerHTML = `
-    <div class="banana-card">
-      <h3>Click any sentence to get a plain-English explanation</h3>
-      <p>We highlight sentences on terms and privacy pages. Click one to see an instant AI explanation. No data is stored.</p>
-      <div class="banana-cta">
-        <button class="secondary">Not now</button>
-        <button class="primary">Got it</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  const close = () => {
-    overlay.remove();
-    chrome.storage.local.set({ gb_seen_sentence_guide: true }).catch(() => {});
-  };
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
-  const [skipBtn, okBtn] = overlay.querySelectorAll('button');
-  if (skipBtn) skipBtn.addEventListener('click', close);
-  if (okBtn) okBtn.addEventListener('click', close);
-  this.firstRunGuideShown = true;
-};

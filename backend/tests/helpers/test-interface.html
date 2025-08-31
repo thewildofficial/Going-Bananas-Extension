@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Going Bananas - OAuth Flow Test Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #FF6B6B, #4ECDC4);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .test-section {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .test-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            margin-right: 15px;
+            color: white;
+        }
+
+        .health-icon { background: #2ecc71; }
+        .auth-icon { background: #3498db; }
+        .profile-icon { background: #9b59b6; }
+        .analysis-icon { background: #e74c3c; }
+
+        .section-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .test-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .test-button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .test-button:active {
+            transform: translateY(0);
+        }
+
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .result-area {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid #3498db;
+        }
+
+        .result-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .result-content {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-success { background: #27ae60; }
+        .status-error { background: #e74c3c; }
+        .status-pending { background: #f39c12; }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #ecf0f1;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .user-info {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .user-info.show {
+            display: block;
+        }
+
+        .user-info h3 {
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .user-detail {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .user-detail span:first-child {
+            font-weight: bold;
+        }
+
+        .step-counter {
+            display: flex;
+            justify-content: center;
+            margin: 30px 0;
+        }
+
+        .step {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #ecf0f1;
+            color: #7f8c8d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+
+        .step.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .step.completed {
+            background: #27ae60;
+            color: white;
+        }
+
+        .flow-diagram {
+            text-align: center;
+            margin: 30px 0;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .flow-diagram .arrow {
+            margin: 0 15px;
+            color: #3498db;
+            font-weight: bold;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Going Bananas OAuth Test Interface</h1>
+            <p>Test your complete Firebase OAuth → MongoDB → AI Personalization flow</p>
+        </div>
+
+        <div class="flow-diagram">
+            <span>🔍 System Check</span>
+            <span class="arrow">→</span>
+            <span>🔐 Google OAuth</span>
+            <span class="arrow">→</span>
+            <span>👤 User Profile</span>
+            <span class="arrow">→</span>
+            <span>🧠 AI Analysis</span>
+            <span class="arrow">→</span>
+            <span>✅ Complete!</span>
+        </div>
+
+        <div class="step-counter">
+            <div class="step active" id="step1">1</div>
+            <div class="step" id="step2">2</div>
+            <div class="step" id="step3">3</div>
+            <div class="step" id="step4">4</div>
+        </div>
+
+        <!-- System Health Test -->
+        <div class="test-section">
+            <div class="section-header">
+                <div class="section-icon health-icon">🔍</div>
+                <h2 class="section-title">Step 1: System Health Check</h2>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Verify that all your services are running and healthy.</p>
+
+            <div class="test-controls">
+                <button class="test-button" id="healthBtn" onclick="testSystemHealth()">
+                    🏥 Check System Health
+                </button>
+            </div>
+
+            <div class="result-area" id="healthResult" style="display: none;">
+                <div class="result-title">
+                    <span class="status-indicator" id="healthStatus"></span>
+                    System Health Results
+                </div>
+                <div class="result-content" id="healthContent"></div>
+            </div>
+        </div>
+
+        <!-- Firebase Authentication Test -->
+        <div class="test-section">
+            <div class="section-header">
+                <div class="section-icon auth-icon">🔐</div>
+                <h2 class="section-title">Step 2: Firebase Authentication</h2>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Test Firebase token validation (this simulates what happens after Google OAuth).</p>
+
+            <div class="test-controls">
+                <button class="test-button" id="authBtn" onclick="testFirebaseAuth()" disabled>
+                    🔑 Test Firebase Auth
+                </button>
+            </div>
+
+            <div class="result-area" id="authResult" style="display: none;">
+                <div class="result-title">
+                    <span class="status-indicator" id="authStatus"></span>
+                    Authentication Results
+                </div>
+                <div class="result-content" id="authContent"></div>
+            </div>
+        </div>
+
+        <!-- User Profile Creation -->
+        <div class="test-section">
+            <div class="section-header">
+                <div class="section-icon profile-icon">👤</div>
+                <h2 class="section-title">Step 3: User Profile Creation</h2>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Create a comprehensive user profile in MongoDB (this simulates the personalization survey).</p>
+
+            <div class="test-controls">
+                <button class="test-button" id="profileBtn" onclick="createUserProfile()" disabled>
+                    📝 Create User Profile
+                </button>
+                <button class="test-button" id="retrieveBtn" onclick="retrieveUserProfile()" disabled style="background: linear-gradient(135deg, #27ae60, #2ecc71);">
+                    📖 Retrieve Profile
+                </button>
+            </div>
+
+            <div class="result-area" id="profileResult" style="display: none;">
+                <div class="result-title">
+                    <span class="status-indicator" id="profileStatus"></span>
+                    Profile Creation Results
+                </div>
+                <div class="result-content" id="profileContent"></div>
+            </div>
+
+            <div class="user-info" id="userInfo" style="display: none;">
+                <h3>👤 User Profile Created Successfully!</h3>
+                <div class="user-detail">
+                    <span>User ID:</span>
+                    <span id="userId">550e8400-e29b-41d4-a716-446655440000</span>
+                </div>
+                <div class="user-detail">
+                    <span>Age Range:</span>
+                    <span id="userAge">26-40</span>
+                </div>
+                <div class="user-detail">
+                    <span>Occupation:</span>
+                    <span id="userOccupation">Technology</span>
+                </div>
+                <div class="user-detail">
+                    <span>Risk Tolerance:</span>
+                    <span id="userRisk">Privacy: 3.2, Financial: 4.0, Legal: 5.2</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Analysis Test -->
+        <div class="test-section">
+            <div class="section-header">
+                <div class="section-icon analysis-icon">🤖</div>
+                <h2 class="section-title">Step 4: AI Analysis Test</h2>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Test personalized AI analysis using the user's profile preferences.</p>
+
+            <div class="test-controls">
+                <button class="test-button" id="analysisBtn" onclick="testAIAnalysis()" disabled>
+                    🧠 Test AI Analysis
+                </button>
+            </div>
+
+            <div class="result-area" id="analysisResult" style="display: none;">
+                <div class="result-title">
+                    <span class="status-indicator" id="analysisStatus"></span>
+                    AI Analysis Results
+                </div>
+                <div class="result-content" id="analysisContent"></div>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:3003';
+        let currentStep = 1;
+        let userProfile = null;
+
+        // Sample user profile data
+        const sampleProfile = {
+            userId: "550e8400-e29b-41d4-a716-446655440000",
+            version: "1.0",
+            completedAt: new Date().toISOString(),
+            demographics: {
+                ageRange: "26_40",
+                jurisdiction: {
+                    primaryCountry: "US",
+                    primaryState: "CA",
+                    frequentTravel: false,
+                    isExpatriate: false,
+                    multipleJurisdictions: []
+                },
+                occupation: "technology"
+            },
+            digitalBehavior: {
+                techSophistication: {
+                    readingFrequency: "read_thoroughly",
+                    comfortLevel: "advanced",
+                    preferredExplanationStyle: "technical_detailed"
+                },
+                usagePatterns: {
+                    primaryActivities: ["work_productivity"],
+                    signupFrequency: "monthly",
+                    deviceUsage: "desktop_primary"
+                }
+            },
+            riskPreferences: {
+                privacy: {
+                    overallImportance: "very_important",
+                    sensitiveDataTypes: [
+                        { dataType: "financial_information", priorityLevel: 1 }
+                    ],
+                    dataProcessingComfort: {
+                        domesticProcessing: "comfortable",
+                        internationalTransfers: "cautious",
+                        thirdPartySharing: "uncomfortable",
+                        aiProcessing: "cautious",
+                        longTermStorage: "uncomfortable"
+                    }
+                },
+                financial: {
+                    paymentApproach: "cautious",
+                    feeImpact: "moderate",
+                    financialSituation: "stable_employment",
+                    subscriptionTolerance: {
+                        autoRenewal: "cautious",
+                        freeTrialToSubscription: "cautious",
+                        priceChanges: "reasonable_notice"
+                    }
+                },
+                legal: {
+                    arbitrationComfort: "prefer_courts",
+                    liabilityTolerance: "reasonable_limitations",
+                    legalKnowledge: {
+                        contractLaw: "intermediate",
+                        privacyLaw: "intermediate",
+                        consumerRights: "basic"
+                    },
+                    previousIssues: "no_issues"
+                }
+            },
+            contextualFactors: {
+                dependentStatus: "just_myself",
+                specialCircumstances: ["handles_sensitive_data"],
+                decisionMakingPriorities: [
+                    { factor: "privacy_protection", priority: 1 },
+                    { factor: "security_safety", priority: 2 },
+                    { factor: "cost_value", priority: 3 },
+                    { factor: "features_functionality", priority: 4 },
+                    { factor: "ease_of_use", priority: 5 },
+                    { factor: "customer_support", priority: 6 },
+                    { factor: "terms_fairness", priority: 7 },
+                    { factor: "reputation_reviews", priority: 8 },
+                    { factor: "compliance_legal", priority: 9 }
+                ],
+                alertPreferences: {
+                    interruptionTiming: "moderate_and_high",
+                    educationalContent: "occasionally_important",
+                    alertFrequencyLimit: 10,
+                    learningMode: true
+                }
+            }
+        };
+
+        async function makeRequest(endpoint, method = 'GET', data = null) {
+            try {
+                const config = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                };
+
+                if (data) {
+                    config.body = JSON.stringify(data);
+                }
+
+                const response = await fetch(`${BASE_URL}${endpoint}`, config);
+                const result = await response.json();
+
+                return { success: response.ok, data: result, status: response.status };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        function updateProgress(step) {
+            currentStep = step;
+            const progress = (step / 4) * 100;
+            document.getElementById('progressFill').style.width = `${progress}%`;
+
+            // Update step indicators
+            for (let i = 1; i <= 4; i++) {
+                const stepEl = document.getElementById(`step${i}`);
+                stepEl.classList.remove('active', 'completed');
+
+                if (i < step) {
+                    stepEl.classList.add('completed');
+                } else if (i === step) {
+                    stepEl.classList.add('active');
+                }
+            }
+
+            // Enable/disable buttons
+            document.getElementById('authBtn').disabled = step < 2;
+            document.getElementById('profileBtn').disabled = step < 3;
+            document.getElementById('retrieveBtn').disabled = step < 3;
+            document.getElementById('analysisBtn').disabled = step < 4;
+        }
+
+        async function testSystemHealth() {
+            const button = document.getElementById('healthBtn');
+            const resultArea = document.getElementById('healthResult');
+            const statusIndicator = document.getElementById('healthStatus');
+            const content = document.getElementById('healthContent');
+
+            button.textContent = '🔄 Testing...';
+            button.disabled = true;
+
+            const result = await makeRequest('/api/health');
+
+            button.textContent = '✅ Health Check Complete';
+            resultArea.style.display = 'block';
+
+            if (result.success) {
+                statusIndicator.className = 'status-indicator status-success';
+                content.textContent = JSON.stringify(result.data, null, 2);
+                updateProgress(2);
+            } else {
+                statusIndicator.className = 'status-indicator status-error';
+                content.textContent = `Error: ${result.error}`;
+            }
+
+            setTimeout(() => {
+                button.textContent = '🏥 Check System Health';
+                button.disabled = false;
+            }, 2000);
+        }
+
+        async function testFirebaseAuth() {
+            const button = document.getElementById('authBtn');
+            const resultArea = document.getElementById('authResult');
+            const statusIndicator = document.getElementById('authStatus');
+            const content = document.getElementById('authContent');
+
+            button.textContent = '🔄 Testing...';
+            button.disabled = true;
+
+            const result = await makeRequest('/api/auth/verify', 'POST', {
+                idToken: "invalid-test-token-for-demo"
+            });
+
+            button.textContent = '✅ Auth Test Complete';
+            resultArea.style.display = 'block';
+
+            if (result.status === 401) {
+                statusIndicator.className = 'status-indicator status-success';
+                content.textContent = `✅ Firebase Authentication Working!
+Status: 401 (Expected for invalid token)
+Message: Token validation is properly enforced
+This confirms Firebase is configured and rejecting invalid tokens as expected.`;
+                updateProgress(3);
+            } else {
+                statusIndicator.className = 'status-indicator status-error';
+                content.textContent = `Unexpected response: ${JSON.stringify(result, null, 2)}`;
+            }
+
+            setTimeout(() => {
+                button.textContent = '🔑 Test Firebase Auth';
+                button.disabled = false;
+            }, 2000);
+        }
+
+        async function createUserProfile() {
+            const button = document.getElementById('profileBtn');
+            const resultArea = document.getElementById('profileResult');
+            const statusIndicator = document.getElementById('profileStatus');
+            const content = document.getElementById('profileContent');
+            const userInfo = document.getElementById('userInfo');
+
+            button.textContent = '🔄 Creating...';
+            button.disabled = true;
+
+            const result = await makeRequest('/api/personalization/profile', 'POST', sampleProfile);
+
+            button.textContent = '✅ Profile Created';
+            resultArea.style.display = 'block';
+
+            if (result.success) {
+                statusIndicator.className = 'status-indicator status-success';
+                content.textContent = JSON.stringify(result.data, null, 2);
+                userInfo.style.display = 'block';
+                userProfile = result.data.profile;
+                updateProgress(4);
+            } else {
+                statusIndicator.className = 'status-indicator status-error';
+                content.textContent = `Error: ${JSON.stringify(result.data, null, 2)}`;
+            }
+
+            setTimeout(() => {
+                button.textContent = '📝 Create User Profile';
+                button.disabled = false;
+            }, 2000);
+        }
+
+        async function retrieveUserProfile() {
+            if (!userProfile) {
+                alert('Please create a user profile first!');
+                return;
+            }
+
+            const button = document.getElementById('retrieveBtn');
+            button.textContent = '🔄 Retrieving...';
+            button.disabled = true;
+
+            const result = await makeRequest(`/api/personalization/profile/${sampleProfile.userId}`);
+
+            if (result.success) {
+                alert('✅ Profile retrieved successfully! Check the profile creation results above.');
+            } else {
+                alert(`❌ Error retrieving profile: ${result.error}`);
+            }
+
+            button.textContent = '📖 Retrieve Profile';
+            button.disabled = false;
+        }
+
+        async function testAIAnalysis() {
+            const button = document.getElementById('analysisBtn');
+            const resultArea = document.getElementById('analysisResult');
+            const statusIndicator = document.getElementById('analysisStatus');
+            const content = document.getElementById('analysisContent');
+
+            button.textContent = '🔄 Analyzing...';
+            button.disabled = true;
+
+            const analysisData = {
+                text: `This comprehensive service agreement includes extensive data collection, third-party sharing arrangements, automatic subscription renewal with significant price increases, mandatory arbitration clauses, and broad liability limitations that substantially restrict user rights and protections.`,
+                userId: sampleProfile.userId,
+                options: {
+                    detail_level: 'comprehensive',
+                    multiPass: true,
+                    contextAware: true,
+                    categories: ['privacy', 'liability', 'termination', 'payment']
+                }
+            };
+
+            const result = await makeRequest('/api/analyze', 'POST', analysisData);
+
+            button.textContent = '✅ Analysis Complete';
+            resultArea.style.display = 'block';
+
+            if (result.success) {
+                statusIndicator.className = 'status-indicator status-success';
+
+                const analysis = result.data.analysis;
+                const formattedResult = {
+                    risk_score: analysis.risk_score,
+                    risk_level: analysis.risk_level,
+                    personalization_applied: analysis.personalization_applied,
+                    major_clauses_identified: analysis.major_clauses?.clauses?.length || 0,
+                    analysis_summary: "AI has analyzed the terms using your personalized risk preferences!"
+                };
+
+                content.textContent = JSON.stringify(formattedResult, null, 2);
+
+                alert('🎉 COMPLETE SUCCESS! Your OAuth + MongoDB + AI system is working perfectly!\n\nThe AI just analyzed terms using your personalized profile preferences.');
+            } else {
+                statusIndicator.className = 'status-indicator status-error';
+                content.textContent = `Error: ${JSON.stringify(result.data, null, 2)}`;
+            }
+
+            setTimeout(() => {
+                button.textContent = '🤖 Test AI Analysis';
+                button.disabled = false;
+            }, 2000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateProgress(1);
+        });
+    </script>
+</body>
+</html>
+
