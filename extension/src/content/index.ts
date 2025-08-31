@@ -97,7 +97,13 @@ class TermsAnalyzer {
     }
 
     // Check for subdomains
-    const hostname = new URL(url).hostname;
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname;
+    } catch (e) {
+      // If the URL is invalid, we cannot reliably check subdomains
+      return false;
+    }
     if (subdomains.some(subdomain => hostname.startsWith(`${subdomain}.`))) {
       return true;
     }
