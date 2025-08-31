@@ -89,15 +89,16 @@ class TermsAnalyzer {
     const keywords = ['terms', 'privacy', 'policy', 'agreement', 'legal', 'tos', 'eula'];
     const subdomains = ['legal', 'terms', 'privacy'];
 
-    // Check for exact subdomain match
-    const hostname = new URL(url).hostname;
+    // Parse the URL only once
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname;
     const parts = hostname.split('.');
     if (parts.length > 1 && subdomains.includes(parts[0])) {
       return true;
     }
 
     // Check for common path patterns
-    const path = new URL(url).pathname;
+    const path = parsedUrl.pathname;
     if (keywords.some(keyword => new RegExp(`[/-]${keyword}([/-]|$)`).test(path))) {
         return true;
     }
