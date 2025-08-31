@@ -132,9 +132,7 @@ class TermsAnalyzer {
       return;
     }
 
-    if (this.isTermsPageByUrl()) {
-        this.triggerAnalysis();
-    } else if (this.isTermsPageByContent()) {
+    if (this.isTermsPageByUrl() || this.isTermsPageByContent()) {
         this.triggerAnalysis();
     } else {
       console.log('✅ Not a terms page. No automatic analysis will be performed.');
