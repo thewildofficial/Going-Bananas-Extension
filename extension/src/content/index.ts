@@ -3,7 +3,6 @@ import { getApiUrl } from '../utils/config';
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
-  private pageHeadings: string[] = [];
 
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
@@ -20,15 +19,10 @@ class TermsAnalyzer {
       return true;
     });
 
-    const onReady = () => {
-      this.pageHeadings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
-      this.autoDetectTerms();
-    };
-
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', onReady);
+      document.addEventListener('DOMContentLoaded', () => this.autoDetectTerms());
     } else {
-      onReady();
+      this.autoDetectTerms();
     }
 
     console.log('Going Bananas T&C Analyzer initialized (TypeScript)');
@@ -95,20 +89,16 @@ class TermsAnalyzer {
     const keywords = ['terms', 'privacy', 'policy', 'agreement', 'legal', 'tos', 'eula'];
     const subdomains = ['legal', 'terms', 'privacy'];
 
-    // Check for keywords in the path
-    if (keywords.some(keyword => url.includes(`/${keyword}`))) {
+    // Check for keywords in the path using word boundaries
+    const path = new URL(url).pathname;
+    if (keywords.some(keyword => new RegExp(`\b${keyword}\b`).test(path))) {
       return true;
     }
 
-    // Check for subdomains
-    let hostname: string;
-    try {
-      hostname = new URL(url).hostname;
-    } catch (e) {
-      // If the URL is invalid, we cannot reliably check subdomains
-      return false;
-    }
-    if (subdomains.some(subdomain => hostname.startsWith(`${subdomain}.`))) {
+    // Check for exact subdomain match
+    const hostname = new URL(url).hostname;
+    const parts = hostname.split('.');
+    if (parts.length > 1 && subdomains.includes(parts[0])) {
       return true;
     }
 
@@ -123,7 +113,8 @@ class TermsAnalyzer {
       return true;
     }
 
-    for (const heading of this.pageHeadings) {
+    const headings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
+    for (const heading of headings) {
       if (keywords.some(keyword => heading.includes(keyword))) {
         return true;
       }
@@ -140,28 +131,34 @@ class TermsAnalyzer {
       return;
     }
 
-    if (this.isTermsPageByUrl() || this.isTermsPageByContent()) {
-      console.log(`🔍 Terms page detected on: ${this.currentUrl}`);
-      const extractedText = this.extractPageContent();
-      
-      if (extractedText && extractedText.length > 100) {
-        console.log(`📄 Extracted ${extractedText.split(' ').length} words of text for analysis`);
-        this.showLoadingNotification();
-        
-        try {
-          const analysis = await this.sendForAutoAnalysis(extractedText);
-          if (analysis) {
-            this.showAnalysisNotification(analysis);
-          }
-        } catch (error) {
-          console.error('Auto-analysis failed:', error);
-          this.hideLoadingNotification();
-        }
-      } else {
-        console.log('❌ No sufficient content found for analysis');
-      }
+    if (this.isTermsPageByUrl()) {
+        this.triggerAnalysis();
+    } else if (this.isTermsPageByContent()) {
+        this.triggerAnalysis();
     } else {
       console.log('✅ Not a terms page. No automatic analysis will be performed.');
+    }
+  }
+
+  private async triggerAnalysis(): Promise<void> {
+    console.log(`🔍 Terms page detected on: ${this.currentUrl}`);
+    const extractedText = this.extractPageContent();
+
+    if (extractedText && extractedText.length > 100) {
+      console.log(`📄 Extracted ${extractedText.split(' ').length} words of text for analysis`);
+      this.showLoadingNotification();
+
+      try {
+        const analysis = await this.sendForAutoAnalysis(extractedText);
+        if (analysis) {
+          this.showAnalysisNotification(analysis);
+        }
+      } catch (error) {
+        console.error('Auto-analysis failed:', error);
+        this.hideLoadingNotification();
+      }
+    } else {
+      console.log('❌ No sufficient content found for analysis');
     }
   }
 
@@ -224,30 +221,15 @@ class TermsAnalyzer {
     
     const notification = document.createElement('div');
     notification.id = 'going-bananas-pdf-notification';
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #ffc107;
-      color: #333;
-      padding: 16px 20px;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-      z-index: 10001;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-    `;
+    notification.className = 'going-bananas-notification going-bananas-pdf-notification';
     notification.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 12px;">
+      <div class="going-bananas-notification-content">
         <span>🍌 PDF detected. Manual analysis is required.</span>
-        <button id="going-bananas-pdf-analyze" style="background: #888; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: not-allowed;" disabled title="PDF analysis is not yet supported.">Analyze</button>
+        <button id="going-bananas-pdf-analyze" class="going-bananas-pdf-button" disabled title="PDF analysis is not yet supported.">Analyze</button>
       </div>
     `;
     
     document.body.appendChild(notification);
-
-    // The Analyze button is disabled for PDFs, so no event listener is added.
   }
 
   private showLoadingNotification(): void {
@@ -261,7 +243,6 @@ class TermsAnalyzer {
           position: fixed;
           top: 20px;
           right: 20px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           padding: 16px 20px;
           border-radius: 12px;
@@ -272,6 +253,13 @@ class TermsAnalyzer {
           font-weight: 500;
           backdrop-filter: blur(10px);
           border: 1px solid rgba(255,255,255,0.2);
+        }
+        .going-bananas-loading-notification {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .going-bananas-pdf-notification {
+          background: #ffc107;
+          color: #333;
         }
         .going-bananas-notification-content {
           display: flex;
@@ -286,6 +274,18 @@ class TermsAnalyzer {
           border-radius: 50%;
           animation: going-bananas-spin 1s linear infinite;
         }
+        .going-bananas-pdf-button {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .going-bananas-pdf-button:disabled {
+            background: #888;
+            cursor: not-allowed;
+        }
         @keyframes going-bananas-spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
@@ -297,7 +297,7 @@ class TermsAnalyzer {
 
     const notification = document.createElement('div');
     notification.id = 'going-bananas-loading';
-    notification.className = 'going-bananas-notification';
+    notification.className = 'going-bananas-notification going-bananas-loading-notification';
     notification.innerHTML = `
       <div class="going-bananas-notification-content">
         <div class="going-bananas-spinner"></div>
