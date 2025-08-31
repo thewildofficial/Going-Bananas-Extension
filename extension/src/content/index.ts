@@ -116,10 +116,11 @@ class TermsAnalyzer {
 
     // Only query headings if title check didn't match
     const headings = Array.from(document.querySelectorAll('h1, h2')).map(h => h.textContent?.toLowerCase() || '');
-    for (const heading of headings) {
-      if (keywords.some(keyword => heading.includes(keyword))) {
-        return true;
-      }
+    // Build a regex to match any keyword
+    const keywordPattern = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const keywordRegex = new RegExp(keywordPattern, 'i');
+    if (headings.some(heading => keywordRegex.test(heading))) {
+      return true;
     }
 
     return false;
