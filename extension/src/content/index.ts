@@ -238,25 +238,13 @@ class TermsAnalyzer {
     notification.innerHTML = `
       <div style="display: flex; align-items: center; gap: 12px;">
         <span>🍌 PDF detected. Manual analysis is required.</span>
-        <button id="going-bananas-pdf-analyze" style="background: #333; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer;">Analyze</button>
+        <button id="going-bananas-pdf-analyze" style="background: #888; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: not-allowed;" disabled title="PDF analysis is not yet supported.">Analyze</button>
       </div>
     `;
     
     document.body.appendChild(notification);
 
-    const analyzeButton = document.getElementById('going-bananas-pdf-analyze');
-    if (analyzeButton) {
-      analyzeButton.addEventListener('click', async () => {
-        this.hideExistingNotifications();
-        this.showLoadingNotification();
-        // This will fail because we can't extract text from the PDF.
-        // This is a placeholder for future implementation.
-        const analysis = await this.sendForAutoAnalysis("This is a PDF document. Text extraction is not yet implemented.");
-        if (analysis) {
-          this.showAnalysisNotification(analysis);
-        }
-      });
-    }
+    // The Analyze button is disabled for PDFs, so no event listener is added.
   }
 
   private showLoadingNotification(): void {
