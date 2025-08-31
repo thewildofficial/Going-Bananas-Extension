@@ -1,3 +1,5 @@
+import { getApiUrl } from '../utils/config';
+
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
@@ -107,6 +109,7 @@ class TermsAnalyzer {
     console.log('🚀 Sending text for analysis directly to API...');
     
     try {
+      const apiUrl = await getApiUrl();
       const payload = {
         text: text,
         url: this.currentUrl,
@@ -123,7 +126,7 @@ class TermsAnalyzer {
 
       console.log('📤 API Payload:', { textLength: payload.text.length, url: payload.url });
       
-      const response = await fetch('http://localhost:3000/api/analyze', {
+      const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -238,6 +241,7 @@ class TermsAnalyzer {
     
     const categories = analysis.categories || {};
     const categoriesHtml = this.buildCategoriesDisplay(categories);
+    const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
     
     notification.innerHTML = `
       <div style="margin-bottom: 12px;">
@@ -258,7 +262,7 @@ class TermsAnalyzer {
           ">
             ${riskScore}/10
           </span>
-          ${analysis.confidence ? `<span style="color: #666; font-size: 11px;">${Math.round(analysis.confidence)}% confidence</span>` : ''}
+          ${confidenceHtml}
         </div>
       </div>
       ${categoriesHtml}
@@ -347,6 +351,36 @@ class TermsAnalyzer {
     return '#28a745';
   }
 
+  private createConfidenceHtml(confidence: any): string {
+    const confidenceValue = parseFloat(confidence);
+    if (isNaN(confidenceValue)) {
+      return '';
+    }
+    const confidencePercentage = Math.round(confidenceValue * 100);
+    return `<span style="color: #666; font-size: 11px;">${confidencePercentage}% confidence</span>`;
+  }
+
+  private createDetailedConfidenceHtml(confidence: any): string {
+    const confidenceValue = parseFloat(confidence);
+    if (isNaN(confidenceValue)) {
+      return '';
+    }
+    const confidencePercentage = Math.round(confidenceValue * 100);
+    return `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
+            🎯 Analysis Confidence
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; height: 8px; background: #e9ecef; border-radius: 4px;">
+              <div style="height: 100%; background: #28a745; border-radius: 4px; width: ${confidencePercentage}%;"></div>
+            </div>
+            <span style="font-size: 12px; font-weight: 600; color: #28a745;">${confidencePercentage}%</span>
+          </div>
+        </div>
+      `;
+  }
+
   private expandNotification(notification: HTMLElement, analysis: any): void {
     notification.style.maxWidth = '450px';
     notification.style.maxHeight = '80vh';
@@ -354,6 +388,7 @@ class TermsAnalyzer {
     
     const riskColor = this.getRiskColor(analysis.risk_level);
     const riskScore = Math.round(analysis.risk_score || 5);
+    const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
     
     const detailedHtml = this.buildDetailedAnalysisDisplay(analysis);
     
@@ -386,7 +421,7 @@ class TermsAnalyzer {
           ">
             ${riskScore}/10
           </span>
-          ${analysis.confidence ? `<span style="color: #666; font-size: 11px;">${Math.round(analysis.confidence)}% confidence</span>` : ''}
+          ${confidenceHtml}
         </div>
       </div>
       ${detailedHtml}
@@ -413,6 +448,7 @@ class TermsAnalyzer {
     const riskScore = Math.round(analysis.risk_score || 5);
     const categories = analysis.categories || {};
     const categoriesHtml = this.buildCategoriesDisplay(categories);
+    const confidenceHtml = this.createConfidenceHtml(analysis.confidence);
     
     notification.innerHTML = `
       <div style="margin-bottom: 12px;">
@@ -433,7 +469,7 @@ class TermsAnalyzer {
           ">
             ${riskScore}/10
           </span>
-          ${analysis.confidence ? `<span style="color: #666; font-size: 11px;">${Math.round(analysis.confidence)}% confidence</span>` : ''}
+          ${confidenceHtml}
         </div>
       </div>
       ${categoriesHtml}
@@ -517,19 +553,7 @@ class TermsAnalyzer {
     }
     
     if (analysis.confidence !== undefined) {
-      html += `
-        <div style="margin-bottom: 12px;">
-          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 13px;">
-            🎯 Analysis Confidence
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div style="flex: 1; height: 8px; background: #e9ecef; border-radius: 4px;">
-              <div style="height: 100%; background: #28a745; border-radius: 4px; width: ${Math.round(analysis.confidence * 100)}%;"></div>
-            </div>
-            <span style="font-size: 12px; font-weight: 600; color: #28a745;">${Math.round(analysis.confidence * 100)}%</span>
-          </div>
-        </div>
-      `;
+      html += this.createDetailedConfidenceHtml(analysis.confidence);
     }
     
     if (analysis.mock !== undefined || analysis.analysis_time) {
@@ -938,6 +962,7 @@ class TermsAnalyzer {
 
   private async sendForAnalysis(text: string): Promise<any> {
     try {
+      const apiUrl = await getApiUrl();
       const payload = {
         text: text,
         url: this.currentUrl,
@@ -952,7 +977,7 @@ class TermsAnalyzer {
         }
       };
 
-      const response = await fetch('http://localhost:3000/api/analyze', {
+      const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

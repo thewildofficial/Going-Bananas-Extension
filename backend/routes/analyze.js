@@ -49,7 +49,7 @@ const analyzeSchema = Joi.object({
  * Analyze terms and conditions text
  */
 router.post('/', async (req, res) => {
-  console.log('Request Body:', req.body);
+  logger.debug('Request Body:', req.body);
   const startTime = Date.now();
   
   try {
@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
 
         const { text, url, userId, sessionId, options } = validatedData;
 
-    console.log('🔍 ANALYSIS REQUEST RECEIVED:', {
+    logger.debug('🔍 ANALYSIS REQUEST RECEIVED:', {
       textLength: text.length,
       multiPass: options.multiPass,
       contextAware: options.contextAware,
@@ -171,9 +171,9 @@ router.post('/', async (req, res) => {
     });
 
     // Debug: Check if major_clauses is present
-    console.log('🔍 Analysis object has major_clauses:', !!analysis.major_clauses);
+    logger.debug('🔍 Analysis object has major_clauses:', !!analysis.major_clauses);
     if (analysis.major_clauses) {
-      console.log('📊 Major clauses count:', analysis.major_clauses.clauses?.length || 0);
+      logger.debug('📊 Major clauses count:', analysis.major_clauses.clauses?.length || 0);
     }
 
     // Return successful response

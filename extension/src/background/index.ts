@@ -1,3 +1,5 @@
+import { getApiUrl } from '../utils/config';
+
 interface ChromeMessage {
   action: string;
   data?: any;
@@ -11,7 +13,6 @@ interface AnalysisData {
 }
 
 class BackgroundService {
-  private apiBaseUrl = 'http://localhost:3000/api';
   private mockApiUrl = 'http://localhost:3001/api';
   
 
@@ -141,7 +142,7 @@ class BackgroundService {
     
     const settings = await this.getSettings();
     const useMockApi = settings.apiEndpoint === 'mock';
-    const apiUrl = useMockApi ? this.mockApiUrl : this.apiBaseUrl;
+    const apiUrl = useMockApi ? this.mockApiUrl : await getApiUrl();
 
     console.log('🎯 Background: analyzeTermsText called with:', {
       textLength: text.length,
