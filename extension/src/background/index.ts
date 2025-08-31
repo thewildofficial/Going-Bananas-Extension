@@ -153,7 +153,7 @@ class BackgroundService {
     
     try {
       const cached = await this.getCachedAnalysis(url);
-      if (cached && false) {
+      if (cached) {
         console.log('📦 Using cached analysis for:', url);
         return cached;
       }
