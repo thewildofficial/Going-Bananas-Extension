@@ -335,8 +335,7 @@ router.post('/selected-text', async (req, res) => {
   } catch (error) {
     const processingTime = Date.now() - startTime;
     
-    logger.error('Selected text analysis failed:', {
-      error: error.message,
+    logger.error(`Selected text analysis failed: ${error.message}`, {
       stack: error.stack,
       processingTime: processingTime,
       textLength: req.body?.text?.length || 0,
