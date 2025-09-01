@@ -1,9 +1,12 @@
 import { getApiUrl } from '../utils/config';
 
 class TermsAnalyzer {
+  private static readonly AUTO_HIDE_TIMEOUT_MS = 15000;
+  
   private isAnalyzing = false;
   private currentUrl = window.location.href;
   private selectedTextForAnalysis: string = '';
+  private boundHandleTextSelection: () => void;
 
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
@@ -1318,8 +1321,6 @@ class TermsAnalyzer {
     }
   }
 
-  private boundHandleTextSelection: () => void;
-
   private attachSelectionListeners(): void {
     console.log('🎧 Attaching text selection listeners');
     this.boundHandleTextSelection = this.handleTextSelection.bind(this);
@@ -1608,13 +1609,13 @@ class TermsAnalyzer {
     // Add the button animation styles
     this.addContextualButtonAnimation();
 
-    // Auto-hide after 15 seconds if not clicked (increased from 10)
+    // Auto-hide after configured timeout if not clicked
     setTimeout(() => {
       if (document.getElementById('going-bananas-contextual-analyze')) {
-        console.log('⏰ Auto-hiding contextual button after 15 seconds');
+        console.log(`⏰ Auto-hiding contextual button after ${TermsAnalyzer.AUTO_HIDE_TIMEOUT_MS / 1000} seconds`);
         this.removeContextualAnalyzeButton();
       }
-    }, 15000);
+    }, TermsAnalyzer.AUTO_HIDE_TIMEOUT_MS);
   }
 
   private removeContextualAnalyzeButton(): void {

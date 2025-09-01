@@ -1,17 +1,7 @@
 // Key Points Component
 import React from 'react';
 import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-
-// Utility function to render markdown-style text
-const renderMarkdownText = (text: string) => {
-  // Convert **text** to <strong>text</strong>
-  const boldText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  
-  // Convert *text* to <em>text</em>
-  const italicText = boldText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  
-  return italicText;
-};
+import { renderMarkdownText } from '@/utils/markdown';
 
 interface KeyPointsProps {
   points: string[];

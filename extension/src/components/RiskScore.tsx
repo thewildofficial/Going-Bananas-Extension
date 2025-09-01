@@ -3,17 +3,7 @@ import React from 'react';
 import { RiskLevel } from '@/types';
 import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
-
-// Utility function to render markdown-style text
-const renderMarkdownText = (text: string) => {
-  // Convert **text** to <strong>text</strong>
-  const boldText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  
-  // Convert *text* to <em>text</em>
-  const italicText = boldText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  
-  return italicText;
-};
+import { renderMarkdownText } from '@/utils/markdown';
 
 interface RiskScoreProps {
   score: number;

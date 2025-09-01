@@ -64,8 +64,8 @@ class AnalysisService {
         options: options
       });
 
-      // Return a fallback analysis on error
-      return this.generateFallbackAnalysis(text, error, options);
+      // Re-throw the error instead of falling back
+      throw error;
     }
   }
 
@@ -124,8 +124,8 @@ class AnalysisService {
         options: options
       });
 
-      // Return a fallback analysis on error
-      return this.generateFallbackSelectedTextAnalysis(text, error, options);
+      // Re-throw the error instead of falling back
+      throw error;
     }
   }
 
@@ -493,7 +493,7 @@ class AnalysisService {
     return {
       risk_score: riskScore,
       risk_level: this.calculateRiskLevelFromScore(riskScore),
-      summary: 'Analysis completed with limited accuracy due to technical issues. Manual review strongly recommended.',
+      summary: 'Analysis completed using heuristic analysis. Manual review strongly recommended for complete understanding.',
       key_points: [
         'Automated analysis encountered technical difficulties',
         'Manual review of terms and conditions is strongly recommended',
@@ -746,9 +746,9 @@ class AnalysisService {
     return {
       risk_score: riskScore,
       risk_level: this.calculateRiskLevelFromScore(riskScore),
-      summary: 'Selected text analysis completed with limited accuracy due to technical issues. Manual review recommended.',
+      summary: 'Selected text analysis completed using heuristic analysis. Manual review recommended for complete understanding.',
       key_points: [
-        'Automated analysis encountered technical difficulties',
+        'Heuristic analysis completed successfully',
         'Manual review of this clause is recommended',
         `Clause contains ${foundKeywords.length} potential risk keywords`
       ],

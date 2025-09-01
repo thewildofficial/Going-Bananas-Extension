@@ -4,17 +4,7 @@ import { RiskScore } from '@/components/RiskScore';
 import { KeyPoints } from '@/components/KeyPoints';
 import { Settings, RefreshCw, Search, Share, Edit3 } from 'lucide-react';
 import { getApiUrl } from '@/utils/config';
-
-// Utility function to render markdown-style text
-const renderMarkdownText = (text: string) => {
-  // Convert **text** to <strong>text</strong>
-  const boldText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  
-  // Convert *text* to <em>text</em>
-  const italicText = boldText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  
-  return italicText;
-};
+import { renderMarkdownText } from '@/utils/markdown';
 
 export const Popup: React.FC = () => {
   const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
