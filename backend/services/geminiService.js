@@ -800,37 +800,7 @@ Now analyze the following terms and conditions:`;
     return summaries[riskLevel] || summaries.medium;
   }
 
-  async analyzeSelectedText(text, options = {}) {
-    if (this.mockMode) {
-      return this.generateMockSelectedTextAnalysis(text, options);
-    }
 
-    try {
-      logger.info('Starting Gemini selected text analysis:', {
-        textLength: text.length,
-        options: options
-      });
-
-      const prompt = this.buildSelectedTextPrompt(text, options);
-      const result = await this.callGeminiWithRetry(prompt);
-      
-      // Parse the JSON response
-      const analysis = JSON.parse(result);
-      
-      logger.info('Gemini selected text analysis completed:', {
-        riskScore: analysis.risk_score,
-        riskLevel: analysis.risk_level
-      });
-
-      return analysis;
-
-    } catch (error) {
-      logger.error('Gemini selected text analysis failed:', error.message);
-      
-      // Return fallback analysis
-      return this.generateFallbackSelectedTextAnalysis(text, error, options);
-    }
-  }
 
   buildSelectedTextPrompt(text, options) {
     const context = options.context ? `\n\nContext: ${options.context}` : '';

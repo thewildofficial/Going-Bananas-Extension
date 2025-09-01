@@ -3,6 +3,18 @@ import { useAnalysis } from '@/hooks/useAnalysis';
 import { RiskScore } from '@/components/RiskScore';
 import { KeyPoints } from '@/components/KeyPoints';
 import { Settings, RefreshCw, Search, Share, Edit3 } from 'lucide-react';
+import { getApiUrl } from '@/utils/config';
+
+// Utility function to render markdown-style text
+const renderMarkdownText = (text: string) => {
+  // Convert **text** to <strong>text</strong>
+  const boldText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Convert *text* to <em>text</em>
+  const italicText = boldText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  return italicText;
+};
 
 export const Popup: React.FC = () => {
   const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
@@ -12,6 +24,7 @@ export const Popup: React.FC = () => {
   const [loadingTermsContent, setLoadingTermsContent] = useState<string | null>(null);
   const [toolbarActive, setToolbarActive] = useState(false);
   const [selectedText, setSelectedText] = useState<string>('');
+  const [notification, setNotification] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -71,9 +84,16 @@ export const Popup: React.FC = () => {
       await navigator.clipboard.writeText(
         `Check out this T&C analysis from Going Bananas! Risk Score: ${analysis?.risk_score?.toFixed(1)}`
       );
+      showNotification('success', 'Analysis shared to clipboard!');
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
+      showNotification('error', 'Failed to copy to clipboard');
     }
+  };
+
+  const showNotification = (type: 'error' | 'success' | 'info', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const toggleToolbar = () => {
@@ -101,7 +121,17 @@ export const Popup: React.FC = () => {
 
   const analyzeSelectedText = async () => {
     if (!selectedText.trim()) {
-      alert('Please select some text first!');
+      showNotification('error', 'Please select some text first!');
+      return;
+    }
+
+    if (selectedText.length < 10) {
+      showNotification('error', 'Selected text is too short. Please select at least 10 characters.');
+      return;
+    }
+
+    if (selectedText.length > 5000) {
+      showNotification('error', 'Selected text is too long. Please select text with 5000 characters or less.');
       return;
     }
 
@@ -112,8 +142,12 @@ export const Popup: React.FC = () => {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const currentUrl = tabs[0]?.url || 'unknown';
       
+      // Get configurable API URL
+      const apiUrl = await getApiUrl();
+      console.log('Using API URL:', apiUrl);
+      
       // Use the new selected text analysis endpoint
-      const response = await fetch('http://localhost:3000/api/analyze/selected-text', {
+      const response = await fetch(`${apiUrl}/analyze/selected-text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -133,26 +167,34 @@ export const Popup: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`Analysis failed with status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Analysis failed with status: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
       console.log('Selected text analysis result:', result);
       
-      // Send the analysis result to the content script to display
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { 
-            action: "showSelectedTextAnalysis", 
-            data: result.analysis,
-            selectedText: selectedText
-          });
-        }
-      });
+      if (result.success && result.analysis) {
+        // Send the analysis result to the content script to display
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, { 
+              action: "showSelectedTextAnalysis", 
+              data: result.analysis,
+              selectedText: selectedText
+            });
+          }
+        });
+        
+        showNotification('success', 'Text analysis completed successfully!');
+      } else {
+        throw new Error(result.error || 'Analysis failed - no analysis data returned');
+      }
       
     } catch (error) {
       console.error('Error analyzing selected text:', error);
-      alert(`Failed to analyze selected text: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      showNotification('error', `Failed to analyze selected text: ${errorMessage}`);
     }
   };
 
@@ -232,6 +274,33 @@ export const Popup: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`absolute top-20 left-4 right-4 z-50 p-3 rounded-lg shadow-lg transition-all duration-300 ${
+          notification.type === 'error' 
+            ? 'bg-red-100 border border-red-300 text-red-800' 
+            : notification.type === 'success'
+            ? 'bg-green-100 border border-green-300 text-green-800'
+            : 'bg-blue-100 border border-blue-300 text-blue-800'
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">
+              {notification.type === 'error' && '⚠️ '}
+              {notification.type === 'success' && '✅ '}
+              {notification.type === 'info' && 'ℹ️ '}
+              {notification.message}
+            </span>
+            <button
+              onClick={() => setNotification(null)}
+              className="ml-2 text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <p>{content}</p>
       
       {termsPages && termsPages.found && (
@@ -320,9 +389,10 @@ export const Popup: React.FC = () => {
 
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Quick Summary</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                {analysis.summary}
-              </p>
+              <p 
+                className="text-sm text-gray-600 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: renderMarkdownText(analysis.summary) }}
+              />
             </div>
 
             <KeyPoints points={analysis.key_points} />

@@ -2,6 +2,17 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 
+// Utility function to render markdown-style text
+const renderMarkdownText = (text: string) => {
+  // Convert **text** to <strong>text</strong>
+  const boldText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Convert *text* to <em>text</em>
+  const italicText = boldText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  return italicText;
+};
+
 interface KeyPointsProps {
   points: string[];
 }
@@ -40,9 +51,10 @@ export const KeyPoints: React.FC<KeyPointsProps> = ({ points }) => {
               <div className="flex-shrink-0 mt-0.5">
                 {getPointIcon(index)}
               </div>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {point}
-              </p>
+              <p 
+                className="text-sm text-gray-700 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: renderMarkdownText(point) }}
+              />
             </div>
           </div>
         ))}
