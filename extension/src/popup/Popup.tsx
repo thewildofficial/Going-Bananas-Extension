@@ -112,7 +112,8 @@ export const Popup: React.FC = () => {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const currentUrl = tabs[0]?.url || 'unknown';
       
-      const response = await fetch('http://localhost:3000/api/analyze', {
+      // Use the new selected text analysis endpoint
+      const response = await fetch('http://localhost:3000/api/analyze/selected-text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,12 +121,11 @@ export const Popup: React.FC = () => {
         body: JSON.stringify({
           text: selectedText,
           url: currentUrl,
+          context: 'Selected text from terms and conditions document',
           options: {
-            language: 'english',
+            language: 'en',
             detail_level: 'comprehensive',
-            categories: ['privacy', 'data-collection', 'user-rights', 'terms-of-service', 'liability', 'termination'],
-            focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices'],
-            output_format: 'structured',
+            focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms'],
             include_recommendations: true,
             risk_assessment: true
           }
@@ -139,12 +139,13 @@ export const Popup: React.FC = () => {
       const result = await response.json();
       console.log('Selected text analysis result:', result);
       
-      // Force update the analysis data by calling analyzeCurrentPage with the result
+      // Send the analysis result to the content script to display
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
           chrome.tabs.sendMessage(tabs[0].id, { 
-            action: "updateAnalysisResult", 
-            data: result
+            action: "showSelectedTextAnalysis", 
+            data: result.analysis,
+            selectedText: selectedText
           });
         }
       });

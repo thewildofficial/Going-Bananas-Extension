@@ -800,6 +800,501 @@ Now analyze the following terms and conditions:`;
     return summaries[riskLevel] || summaries.medium;
   }
 
+  async analyzeSelectedText(text, options = {}) {
+    if (this.mockMode) {
+      return this.generateMockSelectedTextAnalysis(text, options);
+    }
+
+    try {
+      logger.info('Starting Gemini selected text analysis:', {
+        textLength: text.length,
+        options: options
+      });
+
+      const prompt = this.buildSelectedTextPrompt(text, options);
+      const result = await this.callGeminiWithRetry(prompt);
+      
+      // Parse the JSON response
+      const analysis = JSON.parse(result);
+      
+      logger.info('Gemini selected text analysis completed:', {
+        riskScore: analysis.risk_score,
+        riskLevel: analysis.risk_level
+      });
+
+      return analysis;
+
+    } catch (error) {
+      logger.error('Gemini selected text analysis failed:', error.message);
+      
+      // Return fallback analysis
+      return this.generateFallbackSelectedTextAnalysis(text, error, options);
+    }
+  }
+
+  buildSelectedTextPrompt(text, options) {
+    const context = options.context ? `\n\nContext: ${options.context}` : '';
+    const focusAreas = options.focus_areas ? options.focus_areas.join(', ') : 'general legal implications';
+    
+    return `You are a legal AI assistant specializing in analyzing selected clauses from terms and conditions documents. Analyze the following selected text and provide a comprehensive legal assessment.
+
+SELECTED TEXT TO ANALYZE:
+"${text}"${context}
+
+ANALYSIS REQUIREMENTS:
+- Focus on: ${focusAreas}
+- Provide a risk score from 1-10 (1 = very safe, 10 = very concerning)
+- Identify the clause type (privacy, liability, termination, payment, general, etc.)
+- Assess legal implications and user impact
+- Provide specific recommendations
+
+RESPOND WITH VALID JSON IN THIS EXACT FORMAT:
+{
+  "risk_score": <number 1-10>,
+  "risk_level": "<low|medium|high>",
+  "summary": "<brief summary of the clause and its implications>",
+  "key_points": ["<point 1>", "<point 2>", "<point 3>"],
+  "categories": {
+    "privacy": {"score": <1-10>, "concerns": ["<concern 1>", "<concern 2>"]},
+    "liability": {"score": <1-10>, "concerns": ["<concern 1>", "<concern 2>"]},
+    "termination": {"score": <1-10>, "concerns": ["<concern 1>", "<concern 2>"]},
+    "payment": {"score": <1-10>, "concerns": ["<concern 1>", "<concern 2>"]}
+  },
+  "confidence": <0.0-1.0>,
+  "clause_type": "<privacy|liability|termination|payment|general>",
+  "legal_implications": ["<implication 1>", "<implication 2>"],
+  "user_impact": "<low|moderate|high>",
+  "recommendations": ["<recommendation 1>", "<recommendation 2>"],
+  "mock": false
+}
+
+Focus on providing actionable insights about this specific clause and its potential impact on users.`;
+  }
+
+  generateMockSelectedTextAnalysis(text, options) {
+    logger.info('Generating mock selected text analysis');
+    
+    // Simple heuristic analysis for selected text
+    const riskKeywords = [
+      'liability', 'disclaim', 'terminate', 'suspend', 'collect', 'share',
+      'third party', 'binding arbitration', 'waive', 'indemnify', 'breach'
+    ];
+    
+    const foundKeywords = riskKeywords.filter(keyword => 
+      text.toLowerCase().includes(keyword.toLowerCase())
+    );
+    
+    let riskScore = 5.0;
+    riskScore += foundKeywords.length * 0.8;
+    riskScore = Math.min(10, Math.max(1, riskScore));
+    
+    const riskLevel = riskScore <= 3.5 ? 'low' : riskScore <= 7.0 ? 'medium' : 'high';
+    
+    return {
+      risk_score: Math.round(riskScore * 10) / 10,
+      risk_level: riskLevel,
+      summary: `Selected clause analysis: This text contains ${foundKeywords.length} potential risk indicators. ${riskLevel === 'high' ? 'High attention required.' : riskLevel === 'medium' ? 'Moderate attention recommended.' : 'Appears relatively safe.'}`,
+      key_points: [
+        `Contains ${foundKeywords.length} potential risk keywords`,
+        riskLevel === 'high' ? 'High-risk language detected' : 'Standard legal language',
+        'Manual review recommended for complete understanding'
+      ],
+      categories: {
+        privacy: { 
+          score: text.toLowerCase().includes('privacy') || text.toLowerCase().includes('data') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: text.toLowerCase().includes('privacy') ? ['Data collection mentioned', 'Privacy implications present'] : ['No specific privacy concerns identified']
+        },
+        liability: { 
+          score: text.toLowerCase().includes('liability') || text.toLowerCase().includes('disclaim') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: text.toLowerCase().includes('liability') ? ['Liability limitations present', 'Legal responsibility clauses'] : ['No specific liability concerns identified']
+        },
+        termination: { 
+          score: text.toLowerCase().includes('terminate') || text.toLowerCase().includes('suspend') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: text.toLowerCase().includes('terminate') ? ['Termination clauses present', 'Account suspension possible'] : ['No specific termination concerns identified']
+        },
+        payment: { 
+          score: text.toLowerCase().includes('payment') || text.toLowerCase().includes('fee') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: text.toLowerCase().includes('payment') ? ['Payment terms present', 'Financial obligations mentioned'] : ['No specific payment concerns identified']
+        }
+      },
+      confidence: 0.7,
+      clause_type: this.determineClauseType(text),
+      legal_implications: this.generateLegalImplications(text, riskScore),
+      user_impact: riskLevel,
+      recommendations: this.generateSelectedTextRecommendations(riskScore, text),
+      mock: true
+    };
+  }
+
+  determineClauseType(text) {
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes('privacy') || lowerText.includes('data') || lowerText.includes('collect')) {
+      return 'privacy';
+    } else if (lowerText.includes('liability') || lowerText.includes('disclaim') || lowerText.includes('indemnify')) {
+      return 'liability';
+    } else if (lowerText.includes('terminate') || lowerText.includes('suspend') || lowerText.includes('cancel')) {
+      return 'termination';
+    } else if (lowerText.includes('payment') || lowerText.includes('fee') || lowerText.includes('charge')) {
+      return 'payment';
+    } else {
+      return 'general';
+    }
+  }
+
+  generateLegalImplications(text, riskScore) {
+    const implications = [];
+    
+    if (text.toLowerCase().includes('arbitration')) {
+      implications.push('May require arbitration instead of court proceedings');
+    }
+    
+    if (text.toLowerCase().includes('waive')) {
+      implications.push('May waive certain legal rights');
+    }
+    
+    if (text.toLowerCase().includes('liability')) {
+      implications.push('May limit legal liability and damages');
+    }
+    
+    if (riskScore >= 7) {
+      implications.push('High-risk language may have significant legal consequences');
+    }
+    
+    if (implications.length === 0) {
+      implications.push('Standard legal language with typical implications');
+    }
+    
+    return implications;
+  }
+
+  generateSelectedTextRecommendations(riskScore, text) {
+    const recommendations = [];
+    
+    if (riskScore >= 7) {
+      recommendations.push('This clause requires careful review - consider seeking legal advice');
+    }
+    
+    if (text.toLowerCase().includes('arbitration')) {
+      recommendations.push('Understand that disputes may be resolved through arbitration');
+    }
+    
+    if (text.toLowerCase().includes('terminate')) {
+      recommendations.push('Review termination conditions and your rights');
+    }
+    
+    if (recommendations.length === 0) {
+      recommendations.push('This clause appears reasonable but always read carefully');
+    }
+    
+    return recommendations;
+  }
+
+  generateFallbackSelectedTextAnalysis(text, error, options) {
+    logger.warn('Generating fallback selected text analysis due to error:', error.message);
+    
+    return {
+      risk_score: 5.0,
+      risk_level: 'medium',
+      summary: 'Selected text analysis encountered technical difficulties. Manual review strongly recommended.',
+      key_points: [
+        'Automated analysis failed due to technical issues',
+        'Manual review of this clause is strongly recommended',
+        'Unable to provide detailed risk assessment'
+      ],
+      categories: {
+        privacy: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] },
+        liability: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] },
+        termination: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] },
+        payment: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] }
+      },
+      confidence: 0.2,
+      clause_type: 'general',
+      legal_implications: ['Technical error occurred - seek manual legal review'],
+      user_impact: 'unknown',
+      recommendations: ['Technical error occurred - seek manual legal review'],
+      mock: false,
+      fallback: true,
+      error_type: error.message
+    };
+  }
+
+  async analyzeSelectedText(text, options = {}) {
+    if (this.mockMode) {
+      return this.generateMockSelectedTextAnalysis(text, options);
+    }
+
+    try {
+      logger.info('Starting selected text analysis with Gemini:', {
+        textLength: text.length,
+        options: options
+      });
+
+      // Build specialized prompt for selected text analysis
+      const prompt = this.buildSelectedTextAnalysisPrompt(text, options);
+      const result = await this.callGeminiWithRetry(prompt);
+      const parsedResult = this.parseSelectedTextAnalysisResponse(result);
+
+      logger.info('Selected text analysis completed successfully:', {
+        textLength: text.length,
+        riskScore: parsedResult.risk_score,
+        riskLevel: parsedResult.risk_level
+      });
+
+      return parsedResult;
+
+    } catch (error) {
+      logger.error('Gemini selected text analysis failed:', {
+        error: error.message,
+        textLength: text.length,
+        options
+      });
+
+      // Fall back to mock analysis on error
+      logger.info('Falling back to mock selected text analysis due to error');
+      return this.generateMockSelectedTextAnalysis(text, options);
+    }
+  }
+
+  buildSelectedTextAnalysisPrompt(text, options) {
+    const context = options.context || 'Selected text from terms and conditions document';
+    const focusAreas = options.focus_areas || ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices'];
+    
+    return `You are a legal AI assistant specializing in analyzing specific clauses and text selections from terms and conditions documents. 
+
+CONTEXT: ${context}
+
+SELECTED TEXT TO ANALYZE:
+"""
+${text}
+"""
+
+Please analyze this selected text and provide a comprehensive assessment focusing on the following areas: ${focusAreas.join(', ')}.
+
+Return your analysis as a JSON object with the following structure:
+{
+  "risk_score": <number between 1-10>,
+  "risk_level": "<low|medium|high>",
+  "summary": "<brief summary of the clause and its implications>",
+  "key_points": ["<array of 3-5 key points about this clause>"],
+  "categories": {
+    "privacy": {"score": <1-10>, "concerns": ["<array of specific concerns>"]},
+    "liability": {"score": <1-10>, "concerns": ["<array of specific concerns>"]},
+    "termination": {"score": <1-10>, "concerns": ["<array of specific concerns>"]},
+    "payment": {"score": <1-10>, "concerns": ["<array of specific concerns>"]}
+  },
+  "confidence": <number between 0-1>,
+  "clause_type": "<privacy|liability|termination|payment|general>",
+  "legal_implications": ["<array of legal implications>"],
+  "user_impact": "<low|moderate|high>",
+  "recommendations": ["<array of actionable recommendations>"]
+}
+
+Focus on:
+1. The specific legal implications of this exact text
+2. How this clause affects the user's rights and obligations
+3. Potential risks or concerns in this specific selection
+4. Practical recommendations for the user regarding this clause
+
+Be precise and focus only on what is explicitly stated or clearly implied in the selected text.`;
+  }
+
+  parseSelectedTextAnalysisResponse(response) {
+    try {
+      // Try to parse as JSON first
+      if (typeof response === 'string') {
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return this.validateSelectedTextAnalysisResponse(parsed);
+        }
+      }
+
+      // If it's already an object, validate it
+      if (typeof response === 'object') {
+        return this.validateSelectedTextAnalysisResponse(response);
+      }
+
+      throw new Error('Invalid response format from Gemini');
+    } catch (error) {
+      logger.error('Failed to parse selected text analysis response:', error.message);
+      throw new Error('Failed to parse analysis response');
+    }
+  }
+
+  validateSelectedTextAnalysisResponse(analysis) {
+    // Ensure all required fields are present with defaults
+    return {
+      risk_score: this.validateRiskScore(analysis.risk_score),
+      risk_level: this.validateRiskLevel(analysis.risk_level),
+      summary: this.validateSummary(analysis.summary),
+      key_points: this.validateKeyPoints(analysis.key_points),
+      categories: this.validateCategories(analysis.categories),
+      confidence: this.validateConfidence(analysis.confidence),
+      clause_type: analysis.clause_type || 'general',
+      legal_implications: Array.isArray(analysis.legal_implications) ? analysis.legal_implications : ['Manual review recommended'],
+      user_impact: analysis.user_impact || 'moderate',
+      recommendations: Array.isArray(analysis.recommendations) ? analysis.recommendations : ['Review this clause carefully']
+    };
+  }
+
+  validateRiskScore(score) {
+    const numScore = parseFloat(score);
+    if (isNaN(numScore) || numScore < 1 || numScore > 10) {
+      logger.warn('Invalid risk score, using default:', score);
+      return 5.0;
+    }
+    return Math.round(numScore * 10) / 10; // Round to 1 decimal place
+  }
+
+  validateRiskLevel(level) {
+    const validLevels = ['low', 'medium', 'high'];
+    if (!validLevels.includes(level)) {
+      logger.warn('Invalid risk level, using default:', level);
+      return 'medium';
+    }
+    return level;
+  }
+
+  validateSummary(summary) {
+    if (!summary || typeof summary !== 'string' || summary.length < 10) {
+      return 'Analysis completed for selected text. Manual review recommended.';
+    }
+    
+    // Ensure summary is not too long
+    if (summary.length > 500) {
+      return summary.substring(0, 497) + '...';
+    }
+    
+    return summary.trim();
+  }
+
+  validateKeyPoints(keyPoints) {
+    if (!Array.isArray(keyPoints)) {
+      return ['Selected text analysis completed'];
+    }
+
+    // Filter and validate key points
+    const validPoints = keyPoints
+      .filter(point => point && typeof point === 'string' && point.length > 5)
+      .slice(0, 5) // Maximum 5 key points
+      .map(point => point.trim());
+
+    if (validPoints.length === 0) {
+      return ['No specific concerns identified in the selected text'];
+    }
+
+    return validPoints;
+  }
+
+  validateCategories(categories) {
+    const defaultCategory = {
+      score: 5.0,
+      concerns: ['Analysis incomplete for this category']
+    };
+
+    if (!categories || typeof categories !== 'object') {
+      return {
+        privacy: defaultCategory,
+        liability: defaultCategory,
+        termination: defaultCategory,
+        payment: defaultCategory
+      };
+    }
+
+    const validatedCategories = {};
+    const requiredCategories = ['privacy', 'liability', 'termination', 'payment'];
+
+    requiredCategories.forEach(categoryName => {
+      const category = categories[categoryName];
+      
+      if (category && typeof category === 'object') {
+        validatedCategories[categoryName] = {
+          score: this.validateRiskScore(category.score || 5.0),
+          concerns: Array.isArray(category.concerns) 
+            ? category.concerns.slice(0, 3) // Max 3 concerns per category
+            : ['No specific concerns identified']
+        };
+      } else {
+        validatedCategories[categoryName] = defaultCategory;
+      }
+    });
+
+    return validatedCategories;
+  }
+
+  validateConfidence(confidence) {
+    const numConfidence = parseFloat(confidence);
+    if (isNaN(numConfidence) || numConfidence < 0 || numConfidence > 1) {
+      logger.warn('Invalid confidence score, using default:', confidence);
+      return 0.7;
+    }
+    return Math.round(numConfidence * 100) / 100; // Round to 2 decimal places
+  }
+
+  generateMockSelectedTextAnalysis(text, options) {
+    logger.info('Generating mock selected text analysis:', {
+      textLength: text.length,
+      options: options
+    });
+
+    // Simple heuristic-based analysis for selected text
+    let riskScore = 5.0;
+    const lowerText = text.toLowerCase();
+    
+    // Risk keyword detection
+    const riskKeywords = [
+      'liability', 'disclaim', 'terminate', 'suspend', 'collect', 'share',
+      'third party', 'binding arbitration', 'waive', 'indemnify', 'breach',
+      'damages', 'compensation', 'remedy', 'covenant', 'warranty'
+    ];
+    
+    const foundKeywords = riskKeywords.filter(keyword => 
+      lowerText.includes(keyword.toLowerCase())
+    );
+    
+    riskScore += foundKeywords.length * 0.8;
+    riskScore = Math.min(10, Math.max(1, riskScore));
+    
+    const riskLevel = riskScore <= 3.5 ? 'low' : riskScore <= 7.0 ? 'medium' : 'high';
+
+    return {
+      risk_score: riskScore,
+      risk_level: riskLevel,
+      summary: `Selected text analysis completed. This clause appears to be ${riskLevel} risk with ${foundKeywords.length} potential risk indicators.`,
+      key_points: [
+        `Clause contains ${foundKeywords.length} potential risk keywords`,
+        `Overall risk assessment: ${riskLevel}`,
+        'Manual review recommended for complete understanding',
+        foundKeywords.length > 0 ? `Key concerns: ${foundKeywords.slice(0, 3).join(', ')}` : 'No major concerns identified'
+      ],
+      categories: {
+        privacy: { 
+          score: lowerText.includes('privacy') || lowerText.includes('data') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: lowerText.includes('privacy') ? ['Data collection mentioned', 'Privacy implications present'] : ['No specific privacy concerns identified']
+        },
+        liability: { 
+          score: lowerText.includes('liability') || lowerText.includes('disclaim') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: lowerText.includes('liability') ? ['Liability limitations present', 'Legal responsibility clauses'] : ['No specific liability concerns identified']
+        },
+        termination: { 
+          score: lowerText.includes('terminate') || lowerText.includes('suspend') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: lowerText.includes('terminate') ? ['Termination clauses present', 'Account suspension possible'] : ['No specific termination concerns identified']
+        },
+        payment: { 
+          score: lowerText.includes('payment') || lowerText.includes('fee') ? Math.min(10, riskScore + 1) : riskScore,
+          concerns: lowerText.includes('payment') ? ['Payment terms present', 'Financial obligations mentioned'] : ['No specific payment concerns identified']
+        }
+      },
+      confidence: 0.7,
+      clause_type: this.determineClauseType(text),
+      legal_implications: this.generateLegalImplications(text, riskScore),
+      user_impact: riskLevel,
+      recommendations: this.generateSelectedTextRecommendations(riskScore, text),
+      mock: true
+    };
+  }
+
   async testConnection() {
     if (this.mockMode) {
       return { success: true, mock: true };

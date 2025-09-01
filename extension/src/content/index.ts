@@ -3,6 +3,7 @@ import { getApiUrl } from '../utils/config';
 class TermsAnalyzer {
   private isAnalyzing = false;
   private currentUrl = window.location.href;
+  private selectedTextForAnalysis: string = '';
 
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
@@ -1329,10 +1330,17 @@ class TermsAnalyzer {
           this.showContextualAnalyzeButton(selectedText);
         }, 200);
         
-        // Add a subtle highlight to the selected text immediately
-        this.addTemporarySelectionHighlight();
+        // Store the selected text for analysis (non-invasive approach)
+        this.selectedTextForAnalysis = selectedText;
         
       } else {
+        // Check if we have a contextual button that should be preserved
+        const contextualButton = document.getElementById('going-bananas-contextual-analyze');
+        if (contextualButton) {
+          console.log('ℹ️ Selection cleared but contextual button exists - preserving button');
+          return; // Don't remove the button if it exists
+        }
+        
         console.log('❌ No text selected, hiding button');
         infoElement.textContent = 'Select text to analyze';
         infoElement.style.background = 'rgba(255,255,255,0.2)';
@@ -1348,7 +1356,7 @@ class TermsAnalyzer {
         
         // Remove contextual button when no text is selected
         this.removeContextualAnalyzeButton();
-        this.removeTemporarySelectionHighlight();
+        this.selectedTextForAnalysis = '';
       }
     } else {
       console.log('❌ Info element not found - toolbar might not be active');
@@ -1567,12 +1575,18 @@ class TermsAnalyzer {
   private async analyzeSelectedTextInSitu(selectedText: string): Promise<void> {
     console.log('🚀 Starting in-situ analysis for text:', selectedText.substring(0, 50) + '...');
     
+    // Clear the selection now that the button has been clicked
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+    }
+    
     // Remove the contextual button
     this.removeContextualAnalyzeButton();
     
-    // Highlight the selected text with improved visibility
+    // Store the selected text for analysis (non-invasive approach)
     this.highlightSelectedTextImproved(selectedText);
-    console.log('✅ Text highlighted');
+    console.log('✅ Text stored for analysis');
     
     // Show loading indicator with better positioning
     this.showAnalysisLoadingIndicator();
@@ -1582,8 +1596,7 @@ class TermsAnalyzer {
       console.log('📡 Sending request to backend...');
       
       // Get current tab URL for context
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const currentUrl = tabs[0]?.url || 'unknown';
+      const currentUrl = window.location.href;
       
       // Try the new selected text analysis endpoint first
       let response;
@@ -1675,62 +1688,13 @@ class TermsAnalyzer {
   }
 
   private highlightSelectedTextImproved(selectedText: string): void {
-    // Remove any existing highlights
-    this.removeExistingHighlights();
+    // Non-invasive approach: Just store the selection info without modifying DOM
+    console.log('✅ Selected text stored for analysis:', selectedText.substring(0, 50) + '...');
     
-    // Get the current selection to find the exact range
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      console.log('No selection found, falling back to text search');
-      this.highlightSelectedTextBySearch(selectedText);
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-    console.log('Highlighting selection range:', range);
+    // Store the selection info for the analysis widget
+    this.selectedTextForAnalysis = selectedText;
     
-    try {
-      // Create a highlight span for the exact selection
-      const highlightSpan = document.createElement('span');
-      highlightSpan.className = 'going-bananas-highlight';
-      highlightSpan.style.cssText = `
-        background: linear-gradient(135deg, #ff8a00, #e52e71);
-        color: white;
-        padding: 6px 12px;
-        border-radius: 8px;
-        animation: going-bananas-pulse 2s ease-in-out infinite;
-        box-shadow: 0 6px 20px rgba(255, 138, 0, 0.6);
-        font-weight: 700;
-        position: relative;
-        z-index: 1000;
-        border: 3px solid rgba(255, 255, 255, 0.4);
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-        display: inline-block;
-        margin: 3px 0;
-        transform: scale(1.02);
-        transition: all 0.3s ease;
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-      `;
-
-      // Extract the selected content and wrap it
-      const contents = range.extractContents();
-      highlightSpan.appendChild(contents);
-      
-      // Insert the highlighted span
-      range.insertNode(highlightSpan);
-      
-      // Clear the selection
-      selection.removeAllRanges();
-      
-      console.log('✅ Text highlighted with exact selection');
-    } catch (error) {
-      console.error('Error highlighting exact selection:', error);
-      // Fallback to text search method
-      this.highlightSelectedTextBySearch(selectedText);
-    }
-
-    // Add the CSS animation if not already present
+    // Add the CSS animation styles if not already present
     this.addHighlightAnimation();
   }
 
@@ -2252,8 +2216,6 @@ class TermsAnalyzer {
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         errorPanel.remove();
-        // Also remove any highlights when closing error
-        this.removeExistingHighlights();
       });
     }
 
@@ -2261,7 +2223,6 @@ class TermsAnalyzer {
     setTimeout(() => {
       if (document.getElementById('going-bananas-error-panel')) {
         errorPanel.remove();
-        this.removeExistingHighlights();
       }
     }, 8000);
   }
@@ -2432,13 +2393,15 @@ class TermsAnalyzer {
           font-size: 13px;
           color: #374151;
           position: relative;
+          max-height: 200px;
+          overflow-y: auto;
         ">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; color: #1f2937;">
             <span style="font-size: 16px;">📝</span>
             Selected Text
           </div>
-          <div style="font-style: italic; line-height: 1.4;">
-            "${selectedText.substring(0, 100)}${selectedText.length > 100 ? '...' : ''}"
+          <div style="line-height: 1.4; background: white; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;">
+            "${selectedText}"
           </div>
         </div>
       </div>
@@ -2452,7 +2415,6 @@ class TermsAnalyzer {
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         this.removeExistingAnalysisDisplay();
-        this.removeExistingHighlights();
       });
     }
 
@@ -2460,7 +2422,6 @@ class TermsAnalyzer {
     setTimeout(() => {
       if (document.getElementById('going-bananas-analysis-panel')) {
         this.removeExistingAnalysisDisplay();
-        this.removeExistingHighlights();
       }
     }, 45000);
   }
