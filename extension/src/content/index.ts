@@ -7,6 +7,7 @@ class TermsAnalyzer {
   private currentUrl = window.location.href;
   private selectedTextForAnalysis: string = '';
   private boundHandleTextSelection: () => void;
+  private hoverDetectionActive = false;
 
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
@@ -1323,25 +1324,30 @@ class TermsAnalyzer {
 
   private attachSelectionListeners(): void {
     console.log('🎧 Attaching hover-based analysis listeners');
+    this.hoverDetectionActive = true;
     this.attachHoverListeners();
     console.log('✅ Hover listeners attached');
   }
 
   private attachHoverListeners(): void {
-    // Target elements that are good for analysis - be more selective
+    // Target content boxes - entire information units
     const selectors = [
-      'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
-      'article', 'section', 'main', 
-      'div[class*="terms"]', 'div[class*="policy"]', 'div[class*="clause"]',
-      'div[class*="content"]:not([class*="nav"]):not([class*="menu"]):not([class*="header"]):not([class*="footer"])',
-      'li:not([class*="nav"]):not([class*="menu"])',
-      'blockquote'
+      'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'li', // Individual list items
+      'ul', 'ol', // Entire lists
+      'div[class*="heading"]', // Heading containers
+      'div[class*="section"]', // Section containers
+      'div[class*="clause"]', // Clause containers
+      'div[class*="term"]', // Term containers
+      'div[class*="policy"]', // Policy containers
+      'div[class*="content"]', // Content containers
+      'article', 'section' // Semantic content blocks
     ];
 
     selectors.forEach(selector => {
       const elements = document.querySelectorAll(selector);
       elements.forEach(element => {
-        // Additional filtering to avoid navigation and UI elements
+        // Additional filtering to ensure it's a good candidate
         if (this.isGoodForAnalysis(element as HTMLElement)) {
           this.addHoverListenersToElement(element as HTMLElement);
         }
@@ -1353,30 +1359,128 @@ class TermsAnalyzer {
   }
 
   private isGoodForAnalysis(element: HTMLElement): boolean {
-    // Skip navigation, menus, headers, footers, and other UI elements
+    // Smart filtering for content boxes - entire information units
+    
+    const textLength = element.textContent?.trim().length || 0;
+    const tagName = element.tagName.toLowerCase();
     const className = element.className.toLowerCase();
     const id = element.id.toLowerCase();
     
+    // Skip if element is too small
+    if (textLength < 30) {
+      return false;
+    }
+
+    // Skip if element is too large (likely a page container)
+    if (textLength > 5000) {
+      return false;
+    }
+
+    // Skip if element is inside navigation, menus, headers, footers
     if (className.includes('nav') || className.includes('menu') || 
         className.includes('header') || className.includes('footer') ||
         className.includes('sidebar') || className.includes('widget') ||
+        className.includes('button') || className.includes('link') ||
         id.includes('nav') || id.includes('menu') || 
-        id.includes('header') || id.includes('footer')) {
+        id.includes('header') || id.includes('footer') ||
+        id.includes('button') || id.includes('link')) {
       return false;
     }
 
-    // Skip if element is too small
-    if (element.textContent?.trim().length < 50) {
-      return false;
+    // Check if parent is a navigation or UI element
+    const parentElement = element.parentElement;
+    if (parentElement) {
+      const parentClass = parentElement.className.toLowerCase();
+      const parentId = parentElement.id.toLowerCase();
+      
+      if (parentClass.includes('nav') || parentClass.includes('menu') || 
+          parentClass.includes('header') || parentClass.includes('footer') ||
+          parentClass.includes('sidebar') || parentClass.includes('widget') ||
+          parentId.includes('nav') || parentId.includes('menu') || 
+          parentId.includes('header') || parentId.includes('footer')) {
+        return false;
+      }
     }
 
-    // Skip if element is mostly links or buttons
-    const links = element.querySelectorAll('a, button');
-    if (links.length > element.textContent?.length / 10) {
-      return false;
+    // Special handling for different element types
+    if (tagName === 'li') {
+      // List items are good if they're not in navigation
+      const listParent = element.closest('ul, ol');
+      if (listParent) {
+        const listClass = listParent.className.toLowerCase();
+        const listId = listParent.id.toLowerCase();
+        
+        if (listClass.includes('nav') || listClass.includes('menu') ||
+            listId.includes('nav') || listId.includes('menu')) {
+          return false;
+        }
+      }
+      return true; // List items are good content boxes
     }
 
-    return true;
+    if (tagName === 'ul' || tagName === 'ol') {
+      // Entire lists are good if they're not navigation and have meaningful content
+      if (className.includes('nav') || className.includes('menu') ||
+          id.includes('nav') || id.includes('menu')) {
+        return false;
+      }
+      
+      // Check if list has meaningful content (not just navigation links)
+      const listItems = element.querySelectorAll('li');
+      if (listItems.length < 2) {
+        return false; // Single item lists are usually not worth analyzing as a whole
+      }
+      
+      // Check if list items have substantial content
+      let hasSubstantialContent = false;
+      listItems.forEach(li => {
+        if (li.textContent?.trim().length > 30) {
+          hasSubstantialContent = true;
+        }
+      });
+      
+      return hasSubstantialContent;
+    }
+
+    if (tagName.match(/^h[1-6]$/)) {
+      // Headers are good if they have meaningful content
+      return textLength >= 10;
+    }
+
+    if (tagName === 'p') {
+      // Paragraphs are good if they have meaningful content
+      return textLength >= 50;
+    }
+
+    // For divs and other containers, check if they contain meaningful content
+    if (tagName === 'div' || tagName === 'article' || tagName === 'section') {
+      // Check if this is a content container (has class names suggesting content)
+      const isContentContainer = className.includes('heading') || 
+                                className.includes('section') || 
+                                className.includes('clause') || 
+                                className.includes('term') || 
+                                className.includes('policy') || 
+                                className.includes('content');
+      
+      if (isContentContainer) {
+        return true; // Content containers are good
+      }
+      
+      // For other divs, check if they have meaningful text content
+      // and not too many child elements (likely a content block, not a layout container)
+      const childElements = element.children.length;
+      if (childElements > 10) {
+        return false; // Too many children, likely a layout container
+      }
+      
+      // Check if it has meaningful text content
+      const hasTextContent = element.textContent?.trim().length > 0;
+      const hasContentElements = element.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li').length > 0;
+      
+      return hasTextContent && (hasContentElements || textLength >= 100);
+    }
+
+    return false;
   }
 
   private addHoverListenersToElement(element: HTMLElement): void {
@@ -1404,6 +1508,9 @@ class TermsAnalyzer {
     });
 
     element.addEventListener('click', (e) => {
+      if (!this.hoverDetectionActive) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       this.analyzeHoveredElement(e.target as HTMLElement);
@@ -1416,20 +1523,31 @@ class TermsAnalyzer {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.ELEMENT_NODE) {
             const element = node as HTMLElement;
+            // Target content boxes - entire information units
             const selectors = [
-              'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
-              'div[class*="content"]', 'div[class*="text"]', 'div[class*="section"]',
-              'article', 'section', 'main', 'div[class*="terms"]', 'div[class*="policy"]',
-              'li', 'blockquote', 'div[class*="clause"]'
+              'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+              'li', // Individual list items
+              'ul', 'ol', // Entire lists
+              'div[class*="heading"]', // Heading containers
+              'div[class*="section"]', // Section containers
+              'div[class*="clause"]', // Clause containers
+              'div[class*="term"]', // Term containers
+              'div[class*="policy"]', // Policy containers
+              'div[class*="content"]', // Content containers
+              'article', 'section' // Semantic content blocks
             ];
 
             selectors.forEach(selector => {
               if (element.matches(selector)) {
-                this.addHoverListenersToElement(element);
+                if (this.isGoodForAnalysis(element)) {
+                  this.addHoverListenersToElement(element);
+                }
               }
               // Also check children
               element.querySelectorAll(selector).forEach(child => {
-                this.addHoverListenersToElement(child as HTMLElement);
+                if (this.isGoodForAnalysis(child as HTMLElement)) {
+                  this.addHoverListenersToElement(child as HTMLElement);
+                }
               });
             });
           }
@@ -1444,14 +1562,25 @@ class TermsAnalyzer {
   }
 
   private removeSelectionListeners(): void {
-    // Remove hover overlays
+    // Disable hover detection
+    this.hoverDetectionActive = false;
+    
+    // Remove hover overlays and effects
     this.removeAllHoverOverlays();
+    this.removeAllHoverEffects();
     
     // Reset page padding
     document.body.style.paddingTop = '';
+    
+    console.log('🚫 Hover detection disabled');
   }
 
   private handleElementHover(element: HTMLElement): void {
+    // Skip if hover detection is not active
+    if (!this.hoverDetectionActive) {
+      return;
+    }
+
     // Skip if element is too small or already has hover effect
     if (element.textContent?.trim().length < 50 || element.dataset.bananaHovering === 'true') {
       return;
@@ -1546,18 +1675,370 @@ class TermsAnalyzer {
       return;
     }
 
-    // Remove any existing overlays
-    this.removeAllHoverOverlays();
+    // Exit selector mode immediately after clicking
+    this.exitSelectorMode();
 
     // Store the text for analysis
     this.selectedTextForAnalysis = text;
     console.log('🎯 Analyzing hovered element:', text.substring(0, 100) + '...');
 
     // Show loading indicator
-    this.showLoadingIndicator(element);
+    this.showLoadingIndicator();
 
-    // Send analysis request
-    this.analyzeSelectedText(text, element);
+    // Send analysis request directly
+    this.analyzeSelectedTextDirectly(text, element);
+  }
+
+  private exitSelectorMode(): void {
+    // Disable hover detection
+    this.hoverDetectionActive = false;
+    
+    // Remove all hover effects and overlays
+    this.removeAllHoverOverlays();
+    this.removeAllHoverEffects();
+    
+    // Hide the toolbar
+    this.hideTextSelectionToolbar();
+    
+    // Notify popup that toolbar was closed
+    chrome.runtime.sendMessage({ action: 'toolbarClosed' });
+    
+    console.log('🚫 Exited selector mode after analysis');
+  }
+
+  private removeAllHoverEffects(): void {
+    // Remove all hover effects from elements
+    const elements = document.querySelectorAll('[data-banana-hovering="true"]');
+    elements.forEach(element => {
+      const el = element as HTMLElement;
+      el.style.border = '';
+      el.style.backgroundColor = '';
+      el.style.borderRadius = '';
+      el.style.boxShadow = '';
+      el.style.cursor = '';
+      el.dataset.bananaHovering = 'false';
+      
+      // Remove tooltip
+      const tooltip = el.querySelector('.banana-hover-tooltip');
+      if (tooltip) {
+        tooltip.remove();
+      }
+    });
+  }
+
+  private async analyzeSelectedTextDirectly(text: string, element: HTMLElement): Promise<void> {
+    try {
+      console.log('🚀 Starting direct analysis for text:', text.substring(0, 100) + '...');
+
+      // Get current tab URL for context
+      const currentUrl = window.location.href;
+      
+      // Get configurable API URL
+      const apiUrl = await getApiUrl();
+      console.log('🔗 Using API URL for direct analysis:', apiUrl);
+      
+      // Use the selected text analysis endpoint
+      const response = await fetch(`${apiUrl}/analyze/selected-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: text,
+          url: currentUrl,
+          context: 'Selected text from terms and conditions document',
+          options: {
+            language: 'en',
+            detail_level: 'comprehensive',
+            focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms'],
+            include_recommendations: true,
+            risk_assessment: true
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Analysis failed with status: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Direct analysis result:', result);
+      
+      if (result.success && result.analysis) {
+        // Hide loading indicator
+        this.hideLoadingIndicator();
+        
+        // Show analysis widget directly
+        this.showAnalysisWidget(result.analysis, element, text);
+      } else {
+        throw new Error(result.error || 'Analysis failed - no analysis data returned');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error in direct analysis:', error);
+      this.hideLoadingIndicator();
+      
+      // Show error message
+      this.showErrorMessage(element, error instanceof Error ? error.message : 'Analysis failed');
+    }
+  }
+
+  private showAnalysisWidget(analysis: any, element: HTMLElement, text: string): void {
+    console.log('🎨 Creating analysis widget with data:', analysis);
+    
+    // Remove any existing analysis widgets
+    this.removeExistingAnalysisWidgets();
+    
+    // Create the analysis widget
+    const widget = document.createElement('div');
+    widget.id = 'going-bananas-analysis-widget';
+    widget.className = 'banana-analysis-widget';
+    
+    // Style the widget
+    widget.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      z-index: 10001;
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      border: 2px solid #ff8a00;
+    `;
+
+    // Create widget content
+    widget.innerHTML = `
+      <div style="padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #eee; padding-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">🍌</span>
+            <h3 style="margin: 0; color: #333; font-size: 18px; font-weight: 600;">Analysis Result</h3>
+          </div>
+          <button id="close-analysis-widget" style="
+            background: #f5f5f5;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+          ">✕</button>
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="
+              background: ${this.getRiskColor(analysis.risk_level)};
+              color: white;
+              padding: 8px 12px;
+              border-radius: 8px;
+              font-weight: 600;
+              font-size: 14px;
+            ">
+              ${analysis.risk_level.toUpperCase()} RISK
+            </div>
+            <div style="
+              background: #f8f9fa;
+              padding: 8px 12px;
+              border-radius: 8px;
+              font-weight: 600;
+              font-size: 16px;
+              color: #333;
+            ">
+              Score: ${analysis.risk_score}
+            </div>
+          </div>
+          
+          <p style="margin: 0; color: #555; line-height: 1.5; font-size: 14px;">
+            ${analysis.summary}
+          </p>
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin: 0 0 8px 0; color: #333; font-size: 16px; font-weight: 600;">Key Points:</h4>
+          <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 14px; line-height: 1.5;">
+            ${analysis.key_points.map((point: string) => `<li>${point}</li>`).join('')}
+          </ul>
+        </div>
+        
+        ${analysis.recommendations && analysis.recommendations.length > 0 ? `
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin: 0 0 8px 0; color: #333; font-size: 16px; font-weight: 600;">Recommendations:</h4>
+          <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 14px; line-height: 1.5;">
+            ${analysis.recommendations.map((rec: string) => `<li>${rec}</li>`).join('')}
+          </ul>
+        </div>
+        ` : ''}
+        
+        <div style="
+          background: #f8f9fa;
+          padding: 12px;
+          border-radius: 8px;
+          border-left: 4px solid #ff8a00;
+          margin-top: 16px;
+        ">
+          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Analyzed Text:</div>
+          <div style="font-size: 13px; color: #333; line-height: 1.4; max-height: 100px; overflow-y: auto;">
+            "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add to document
+    document.body.appendChild(widget);
+
+    // Add close button functionality
+    const closeBtn = widget.querySelector('#close-analysis-widget');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        widget.remove();
+      });
+    }
+
+    // Add backdrop
+    const backdrop = document.createElement('div');
+    backdrop.id = 'going-bananas-analysis-backdrop';
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+    `;
+    
+    backdrop.addEventListener('click', () => {
+      widget.remove();
+      backdrop.remove();
+    });
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(widget);
+
+    console.log('✅ Analysis widget displayed');
+  }
+
+  private getRiskColor(riskLevel: string): string {
+    switch (riskLevel.toLowerCase()) {
+      case 'low': return '#10b981';
+      case 'medium': return '#f59e0b';
+      case 'high': return '#ef4444';
+      default: return '#6b7280';
+    }
+  }
+
+  private removeExistingAnalysisWidgets(): void {
+    const existingWidget = document.getElementById('going-bananas-analysis-widget');
+    const existingBackdrop = document.getElementById('going-bananas-analysis-backdrop');
+    
+    if (existingWidget) existingWidget.remove();
+    if (existingBackdrop) existingBackdrop.remove();
+  }
+
+  private showErrorMessage(element: HTMLElement, message: string): void {
+    console.log('❌ Showing error message:', message);
+    
+    // Create error notification
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'banana-error-message';
+    errorDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ef4444;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 10001;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      max-width: 300px;
+    `;
+    
+    errorDiv.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span>⚠️</span>
+        <span>${message}</span>
+      </div>
+    `;
+    
+    document.body.appendChild(errorDiv);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      if (errorDiv.parentNode) {
+        errorDiv.remove();
+      }
+    }, 5000);
+  }
+
+  private showLoadingIndicator(): void {
+    // Remove any existing loading indicators
+    this.hideLoadingIndicator();
+    
+    // Create loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'going-bananas-loading-indicator';
+    loadingDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 138, 0, 0.95);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 10001;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    `;
+    
+    loadingDiv.innerHTML = `
+      <div style="
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top: 2px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      "></div>
+      <span>Analyzing text...</span>
+    `;
+    
+    // Add CSS animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(loadingDiv);
+    console.log('⏳ Loading indicator shown');
+  }
+
+  private hideLoadingIndicator(): void {
+    const loadingDiv = document.getElementById('going-bananas-loading-indicator');
+    if (loadingDiv) {
+      loadingDiv.remove();
+      console.log('✅ Loading indicator hidden');
+    }
   }
 
   // Legacy text selection handler - hover-based analysis is now primary
