@@ -1862,7 +1862,7 @@ class TermsAnalyzer {
     const textNodes: Text[] = [];
     let node;
     
-    while (node = walker.nextNode()) {
+    while ((node = walker.nextNode())) {
       if (node.textContent && node.textContent.includes(selectedText)) {
         textNodes.push(node as Text);
       }
