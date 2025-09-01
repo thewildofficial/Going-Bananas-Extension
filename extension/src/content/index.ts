@@ -89,6 +89,15 @@ class TermsAnalyzer {
           }
           break;
 
+        case 'showSelectedTextAnalysis':
+          if (message.data && message.selectedText) {
+            this.showSelectedTextAnalysis(message.data, message.selectedText);
+            sendResponse({ success: true, message: 'Selected text analysis displayed' });
+          } else {
+            sendResponse({ success: false, error: 'No analysis data or selected text provided' });
+          }
+          break;
+
         default:
           sendResponse({
             success: false,
@@ -1189,6 +1198,9 @@ class TermsAnalyzer {
     if (toolbar) {
       toolbar.style.display = 'block';
       toolbar.style.opacity = '1';
+      console.log('✅ Toolbar activated and visible');
+    } else {
+      console.log('❌ Toolbar element not found');
     }
   }
 
@@ -1267,8 +1279,10 @@ class TermsAnalyzer {
   }
 
   private attachSelectionListeners(): void {
+    console.log('🎧 Attaching text selection listeners');
     document.addEventListener('mouseup', this.handleTextSelection.bind(this));
     document.addEventListener('keyup', this.handleTextSelection.bind(this));
+    console.log('✅ Selection listeners attached');
   }
 
   private removeSelectionListeners(): void {
@@ -1283,26 +1297,1172 @@ class TermsAnalyzer {
     const selectedText = this.getSelectedText();
     const infoElement = document.getElementById('selected-text-info');
     
+    console.log('🔍 Text selection handler called:', { selectedText: selectedText?.substring(0, 50), length: selectedText?.length });
+    
     if (infoElement) {
       if (selectedText && selectedText.length > 0) {
+        console.log('✅ Text selected, updating UI and showing button');
+        
+        // Enhanced visual feedback for text selection
         infoElement.textContent = `${selectedText.length} characters selected`;
-        infoElement.style.background = 'rgba(255,255,255,0.3)';
+        infoElement.style.background = 'rgba(255,255,255,0.4)';
+        infoElement.style.border = '2px solid rgba(255,255,255,0.6)';
+        infoElement.style.transform = 'scale(1.05)';
+        infoElement.style.transition = 'all 0.3s ease';
+        
+        // Add a subtle glow effect to the toolbar
+        const toolbar = document.getElementById('going-bananas-toolbar');
+        if (toolbar) {
+          toolbar.style.boxShadow = '0 4px 20px rgba(255, 138, 0, 0.4)';
+          toolbar.style.borderBottom = '3px solid rgba(255,255,255,0.4)';
+        }
         
         // Send selected text to popup
         chrome.runtime.sendMessage({ 
           action: 'textSelected', 
           text: selectedText 
         });
+
+        // Show contextual analyze button on the page with a slight delay for better UX
+        console.log('🎯 Attempting to show contextual analyze button');
+        setTimeout(() => {
+          this.showContextualAnalyzeButton(selectedText);
+        }, 200);
+        
+        // Add a subtle highlight to the selected text immediately
+        this.addTemporarySelectionHighlight();
+        
       } else {
+        console.log('❌ No text selected, hiding button');
         infoElement.textContent = 'Select text to analyze';
         infoElement.style.background = 'rgba(255,255,255,0.2)';
+        infoElement.style.border = 'none';
+        infoElement.style.transform = 'scale(1)';
+        
+        // Reset toolbar styling
+        const toolbar = document.getElementById('going-bananas-toolbar');
+        if (toolbar) {
+          toolbar.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+          toolbar.style.borderBottom = '2px solid rgba(255,255,255,0.2)';
+        }
+        
+        // Remove contextual button when no text is selected
+        this.removeContextualAnalyzeButton();
+        this.removeTemporarySelectionHighlight();
       }
+    } else {
+      console.log('❌ Info element not found - toolbar might not be active');
     }
   }
 
   private getSelectedText(): string {
     const selection = window.getSelection();
     return selection ? selection.toString().trim() : '';
+  }
+
+  // Contextual Analyze Button Methods
+  private showContextualAnalyzeButton(selectedText: string): void {
+    console.log('🎯 showContextualAnalyzeButton called with text:', selectedText.substring(0, 50));
+    
+    // Remove any existing contextual button
+    this.removeContextualAnalyzeButton();
+    
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      console.log('❌ No selection or range found');
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    console.log('📍 Selection rect:', rect);
+    
+    // Calculate button position with improved positioning logic
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const buttonWidth = 220; // Slightly larger button
+    const buttonHeight = 48; // Slightly taller button
+    const padding = 12; // Padding from edges
+    
+    // Calculate optimal position
+    let top = rect.bottom + padding;
+    let left = rect.left + (rect.width / 2) - (buttonWidth / 2); // Center horizontally on selection
+    
+    // Adjust if button would go off-screen horizontally
+    if (left < padding) {
+      left = padding;
+    } else if (left + buttonWidth > viewportWidth - padding) {
+      left = viewportWidth - buttonWidth - padding;
+    }
+    
+    // Adjust if button would go off-screen vertically
+    if (top + buttonHeight > viewportHeight - padding) {
+      // Try positioning above the selection
+      top = rect.top - buttonHeight - padding;
+      
+      // If still off-screen, position at the top of the viewport
+      if (top < padding) {
+        top = padding;
+      }
+    }
+    
+    // Ensure minimum top position
+    if (top < padding) {
+      top = padding;
+    }
+    
+    // Fallback: if selection rect is invalid, position near cursor
+    if (rect.width === 0 && rect.height === 0) {
+      console.log('⚠️ Invalid selection rect, positioning near cursor');
+      top = Math.max(padding, viewportHeight / 2 - buttonHeight / 2);
+      left = Math.max(padding, viewportWidth / 2 - buttonWidth / 2);
+    }
+    
+    console.log('📍 Calculated button position:', { top, left, viewportWidth, viewportHeight, selectionRect: rect });
+    
+    // Create the contextual analyze button with improved styling
+    const analyzeButton = document.createElement('div');
+    analyzeButton.id = 'going-bananas-contextual-analyze';
+    analyzeButton.style.cssText = `
+      position: fixed;
+      top: ${top}px;
+      left: ${left}px;
+      background: linear-gradient(135deg, #ff8a00, #e52e71);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(255, 138, 0, 0.5);
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      animation: going-bananas-button-appear 0.4s ease-out;
+      min-width: 200px;
+      max-width: 280px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    `;
+    
+    analyzeButton.innerHTML = `
+      <span style="font-size: 18px; animation: going-bananas-bounce 2s ease-in-out infinite;">🍌</span>
+      <span>Analyze This Text</span>
+      <span style="font-size: 12px; opacity: 0.8;">→</span>
+    `;
+
+    // Add enhanced hover effects
+    analyzeButton.addEventListener('mouseenter', () => {
+      analyzeButton.style.transform = 'scale(1.08) translateY(-2px)';
+      analyzeButton.style.boxShadow = '0 12px 32px rgba(255, 138, 0, 0.7)';
+      analyzeButton.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+    });
+
+    analyzeButton.addEventListener('mouseleave', () => {
+      analyzeButton.style.transform = 'scale(1) translateY(0)';
+      analyzeButton.style.boxShadow = '0 8px 24px rgba(255, 138, 0, 0.5)';
+      analyzeButton.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+    });
+
+    // Add click handler
+    analyzeButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.analyzeSelectedTextInSitu(selectedText);
+    });
+
+    document.body.appendChild(analyzeButton);
+    console.log('✅ Contextual analyze button added to DOM');
+    
+    // Verify the button is actually visible
+    setTimeout(() => {
+      const button = document.getElementById('going-bananas-contextual-analyze');
+      if (button) {
+        const buttonRect = button.getBoundingClientRect();
+        console.log('🔍 Button actual position:', buttonRect);
+        console.log('🔍 Button computed styles:', {
+          display: getComputedStyle(button).display,
+          visibility: getComputedStyle(button).visibility,
+          opacity: getComputedStyle(button).opacity,
+          zIndex: getComputedStyle(button).zIndex
+        });
+      } else {
+        console.log('❌ Button not found in DOM after creation');
+      }
+    }, 100);
+
+    // Add the button animation styles
+    this.addContextualButtonAnimation();
+
+    // Auto-hide after 15 seconds if not clicked (increased from 10)
+    setTimeout(() => {
+      if (document.getElementById('going-bananas-contextual-analyze')) {
+        console.log('⏰ Auto-hiding contextual button after 15 seconds');
+        this.removeContextualAnalyzeButton();
+      }
+    }, 15000);
+  }
+
+  private removeContextualAnalyzeButton(): void {
+    const existingButton = document.getElementById('going-bananas-contextual-analyze');
+    if (existingButton) {
+      console.log('🗑️ Removing existing contextual button');
+      existingButton.remove();
+    } else {
+      console.log('ℹ️ No existing contextual button to remove');
+    }
+  }
+
+  private addContextualButtonAnimation(): void {
+    if (document.getElementById('going-bananas-contextual-button-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'going-bananas-contextual-button-styles';
+    style.textContent = `
+      @keyframes going-bananas-button-appear {
+        from {
+          opacity: 0;
+          transform: translateY(-20px) scale(0.8);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      
+      @keyframes going-bananas-bounce {
+        0%, 20%, 50%, 80%, 100% {
+          transform: translateY(0);
+        }
+        40% {
+          transform: translateY(-3px);
+        }
+        60% {
+          transform: translateY(-1px);
+        }
+      }
+      
+      @keyframes going-bananas-pulse {
+        0% {
+          transform: scale(1);
+          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 8px 28px rgba(255, 138, 0, 0.6);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  private async analyzeSelectedTextInSitu(selectedText: string): Promise<void> {
+    console.log('🚀 Starting in-situ analysis for text:', selectedText.substring(0, 50) + '...');
+    
+    // Remove the contextual button
+    this.removeContextualAnalyzeButton();
+    
+    // Highlight the selected text with improved visibility
+    this.highlightSelectedTextImproved(selectedText);
+    console.log('✅ Text highlighted');
+    
+    // Show loading indicator with better positioning
+    this.showAnalysisLoadingIndicator();
+    console.log('⏳ Loading indicator shown');
+    
+    try {
+      console.log('📡 Sending request to backend...');
+      
+      // Get current tab URL for context
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentUrl = tabs[0]?.url || 'unknown';
+      
+      // Try the new selected text analysis endpoint first
+      let response;
+      try {
+        response = await fetch('http://localhost:3000/api/analyze/selected-text', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: selectedText,
+            url: currentUrl,
+            context: 'Selected text from terms and conditions document',
+            options: {
+              language: 'en',
+              detail_level: 'comprehensive',
+              focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms'],
+              include_recommendations: true,
+              risk_assessment: true
+            }
+          }),
+        });
+      } catch (fetchError) {
+        console.log('⚠️ Selected text endpoint failed, trying main analysis endpoint');
+        // Fallback to main analysis endpoint
+        const apiUrl = await getApiUrl();
+        response = await fetch(`${apiUrl}/analyze`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: selectedText,
+            url: currentUrl,
+            options: {
+              language: 'en',
+              detail_level: 'standard',
+              cache: false,
+              categories: ['privacy', 'liability', 'termination', 'payment'],
+              multiPass: false,
+              streaming: false,
+              contextAware: false
+            }
+          }),
+        });
+      }
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Analysis failed with status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Analysis completed:', result);
+      
+      // Hide loading indicator
+      this.hideAnalysisLoadingIndicator();
+      console.log('✅ Loading indicator hidden');
+      
+      // Show the analysis results in situ
+      console.log('🎨 Showing analysis widget...');
+      this.showInSituAnalysisResults(result.analysis || result, selectedText);
+      console.log('✅ Analysis widget should now be visible');
+      
+    } catch (error) {
+      console.error('❌ Error analyzing selected text:', error);
+      this.hideAnalysisLoadingIndicator();
+      
+      // Show a more user-friendly error message
+      const friendlyError = {
+        message: error instanceof Error ? error.message : 'Analysis failed',
+        details: 'Unable to analyze the selected text. Please try again or check your connection.'
+      };
+      
+      this.showAnalysisError(friendlyError);
+    }
+  }
+
+  // Selected Text Analysis Methods
+  private showSelectedTextAnalysis(analysis: any, selectedText: string): void {
+    console.log('📊 Displaying selected text analysis:', analysis);
+    
+    // First, highlight the selected text with a pulsating effect
+    this.highlightSelectedText(selectedText);
+    
+    // Then show the analysis results
+    this.displaySelectedTextAnalysisResults(analysis, selectedText);
+  }
+
+  private highlightSelectedTextImproved(selectedText: string): void {
+    // Remove any existing highlights
+    this.removeExistingHighlights();
+    
+    // Get the current selection to find the exact range
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      console.log('No selection found, falling back to text search');
+      this.highlightSelectedTextBySearch(selectedText);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    console.log('Highlighting selection range:', range);
+    
+    try {
+      // Create a highlight span for the exact selection
+      const highlightSpan = document.createElement('span');
+      highlightSpan.className = 'going-bananas-highlight';
+      highlightSpan.style.cssText = `
+        background: linear-gradient(135deg, #ff8a00, #e52e71);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 8px;
+        animation: going-bananas-pulse 2s ease-in-out infinite;
+        box-shadow: 0 6px 20px rgba(255, 138, 0, 0.6);
+        font-weight: 700;
+        position: relative;
+        z-index: 1000;
+        border: 3px solid rgba(255, 255, 255, 0.4);
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+        display: inline-block;
+        margin: 3px 0;
+        transform: scale(1.02);
+        transition: all 0.3s ease;
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+      `;
+
+      // Extract the selected content and wrap it
+      const contents = range.extractContents();
+      highlightSpan.appendChild(contents);
+      
+      // Insert the highlighted span
+      range.insertNode(highlightSpan);
+      
+      // Clear the selection
+      selection.removeAllRanges();
+      
+      console.log('✅ Text highlighted with exact selection');
+    } catch (error) {
+      console.error('Error highlighting exact selection:', error);
+      // Fallback to text search method
+      this.highlightSelectedTextBySearch(selectedText);
+    }
+
+    // Add the CSS animation if not already present
+    this.addHighlightAnimation();
+  }
+
+  private highlightSelectedTextBySearch(selectedText: string): void {
+    // Find and highlight the selected text with improved visibility
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    const textNodes: Text[] = [];
+    let node;
+    
+    while (node = walker.nextNode()) {
+      if (node.textContent && node.textContent.includes(selectedText)) {
+        textNodes.push(node as Text);
+      }
+    }
+
+    textNodes.forEach(textNode => {
+      const parent = textNode.parentNode;
+      if (!parent) return;
+
+      const text = textNode.textContent || '';
+      const index = text.indexOf(selectedText);
+      
+      if (index !== -1) {
+        // Split the text node
+        const beforeText = text.substring(0, index);
+        const afterText = text.substring(index + selectedText.length);
+        
+        // Create the highlighted span with improved visibility
+        const highlightSpan = document.createElement('span');
+        highlightSpan.className = 'going-bananas-highlight';
+        highlightSpan.textContent = selectedText;
+        highlightSpan.style.cssText = `
+          background: linear-gradient(135deg, #ff8a00, #e52e71);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 8px;
+          animation: going-bananas-pulse 2s ease-in-out infinite;
+          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.6);
+          font-weight: 700;
+          position: relative;
+          z-index: 1000;
+          border: 3px solid rgba(255, 255, 255, 0.4);
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+          display: inline-block;
+          margin: 3px 0;
+          transform: scale(1.02);
+          transition: all 0.3s ease;
+          backdrop-filter: blur(2px);
+          -webkit-backdrop-filter: blur(2px);
+        `;
+
+        // Replace the text node with the new structure
+        if (beforeText) {
+          parent.insertBefore(document.createTextNode(beforeText), textNode);
+        }
+        parent.insertBefore(highlightSpan, textNode);
+        if (afterText) {
+          parent.insertBefore(document.createTextNode(afterText), textNode);
+        }
+        parent.removeChild(textNode);
+      }
+    });
+  }
+
+  private highlightSelectedText(selectedText: string): void {
+    // Use the improved version
+    this.highlightSelectedTextImproved(selectedText);
+  }
+
+  private addHighlightAnimation(): void {
+    if (document.getElementById('going-bananas-highlight-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'going-bananas-highlight-styles';
+    style.textContent = `
+      @keyframes going-bananas-pulse {
+        0% {
+          transform: scale(1.02);
+          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 8px 28px rgba(255, 138, 0, 0.6);
+        }
+        100% {
+          transform: scale(1.02);
+          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
+        }
+      }
+      
+      .going-bananas-highlight {
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+      
+      .going-bananas-highlight:hover {
+        transform: scale(1.08) !important;
+        box-shadow: 0 10px 32px rgba(255, 138, 0, 0.7) !important;
+        border-color: rgba(255, 255, 255, 0.6) !important;
+      }
+      
+      .going-bananas-highlight::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: linear-gradient(135deg, #ff8a00, #e52e71);
+        border-radius: 10px;
+        z-index: -1;
+        opacity: 0.3;
+        animation: going-bananas-pulse 2s ease-in-out infinite;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  private removeExistingHighlights(): void {
+    const highlights = document.querySelectorAll('.going-bananas-highlight');
+    highlights.forEach(highlight => {
+      const parent = highlight.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(highlight.textContent || ''), highlight);
+        parent.normalize(); // Merge adjacent text nodes
+      }
+    });
+  }
+
+  private addTemporarySelectionHighlight(): void {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    // Remove any existing temporary highlight
+    this.removeTemporarySelectionHighlight();
+
+    const range = selection.getRangeAt(0);
+    const tempHighlight = document.createElement('span');
+    tempHighlight.id = 'going-bananas-temp-highlight';
+    tempHighlight.style.cssText = `
+      background: rgba(255, 138, 0, 0.3);
+      border-radius: 4px;
+      padding: 2px 4px;
+      transition: all 0.2s ease;
+      animation: going-bananas-temp-pulse 1s ease-in-out;
+    `;
+
+    try {
+      const contents = range.extractContents();
+      tempHighlight.appendChild(contents);
+      range.insertNode(tempHighlight);
+    } catch (error) {
+      console.log('Could not add temporary highlight:', error);
+    }
+
+    // Add the temporary pulse animation
+    this.addTemporaryHighlightAnimation();
+  }
+
+  private removeTemporarySelectionHighlight(): void {
+    const tempHighlight = document.getElementById('going-bananas-temp-highlight');
+    if (tempHighlight) {
+      const parent = tempHighlight.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(tempHighlight.textContent || ''), tempHighlight);
+        parent.normalize();
+      }
+    }
+  }
+
+  private addTemporaryHighlightAnimation(): void {
+    if (document.getElementById('going-bananas-temp-highlight-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'going-bananas-temp-highlight-styles';
+    style.textContent = `
+      @keyframes going-bananas-temp-pulse {
+        0% {
+          background: rgba(255, 138, 0, 0.1);
+          transform: scale(1);
+        }
+        50% {
+          background: rgba(255, 138, 0, 0.4);
+          transform: scale(1.02);
+        }
+        100% {
+          background: rgba(255, 138, 0, 0.3);
+          transform: scale(1);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  private displaySelectedTextAnalysisResults(analysis: any, selectedText: string): void {
+    // Remove any existing analysis display
+    this.removeExistingAnalysisDisplay();
+    
+    // Create the analysis results panel
+    const analysisPanel = document.createElement('div');
+    analysisPanel.id = 'going-bananas-analysis-panel';
+    analysisPanel.style.cssText = `
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      width: 400px;
+      max-height: 80vh;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+      border: 2px solid #ff8a00;
+      z-index: 999998;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      animation: going-bananas-slide-in 0.3s ease-out;
+    `;
+
+    // Add slide-in animation
+    this.addAnalysisPanelAnimation();
+
+    const riskColor = this.getRiskColor(analysis.risk_level);
+    const riskIcon = this.getRiskIcon(analysis.risk_level);
+
+    analysisPanel.innerHTML = `
+      <div style="
+        background: linear-gradient(135deg, ${riskColor}, ${riskColor}dd);
+        color: white;
+        padding: 16px;
+        position: relative;
+      ">
+        <button id="close-analysis-btn" style="
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          cursor: pointer;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">×</button>
+        
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+          <span style="font-size: 24px;">${riskIcon}</span>
+          <div>
+            <h3 style="margin: 0; font-size: 18px; font-weight: 600;">Selected Text Analysis</h3>
+            <p style="margin: 0; font-size: 12px; opacity: 0.9;">${analysis.clause_type || 'general'} clause</p>
+          </div>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div style="text-align: center;">
+            <div style="font-size: 28px; font-weight: bold;">${analysis.risk_score?.toFixed(1) || 'N/A'}</div>
+            <div style="font-size: 12px; opacity: 0.9;">Risk Score</div>
+          </div>
+          <div style="flex: 1;">
+            <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">${analysis.risk_level?.toUpperCase() || 'UNKNOWN'} RISK</div>
+            <div style="font-size: 12px; opacity: 0.9;">${analysis.user_impact || 'moderate'} impact</div>
+          </div>
+        </div>
+      </div>
+      
+      <div style="padding: 16px; max-height: 60vh; overflow-y: auto;">
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Summary</h4>
+          <p style="margin: 0; font-size: 13px; line-height: 1.4; color: #666;">${analysis.summary || 'No summary available'}</p>
+        </div>
+        
+        ${analysis.key_points && analysis.key_points.length > 0 ? `
+          <div style="margin-bottom: 16px;">
+            <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Key Points</h4>
+            <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.4; color: #666;">
+              ${analysis.key_points.slice(0, 3).map((point: string) => `<li>${point}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+        
+        ${analysis.legal_implications && analysis.legal_implications.length > 0 ? `
+          <div style="margin-bottom: 16px;">
+            <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Legal Implications</h4>
+            <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.4; color: #666;">
+              ${analysis.legal_implications.slice(0, 3).map((implication: string) => `<li>${implication}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+        
+        ${analysis.recommendations && analysis.recommendations.length > 0 ? `
+          <div style="margin-bottom: 16px;">
+            <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Recommendations</h4>
+            <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.4; color: #666;">
+              ${analysis.recommendations.slice(0, 3).map((rec: string) => `<li>${rec}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+        
+        <div style="
+          background: #f8f9fa;
+          padding: 12px;
+          border-radius: 8px;
+          border-left: 4px solid #ff8a00;
+          font-size: 12px;
+          color: #666;
+        ">
+          <strong>Selected Text:</strong><br>
+          "${selectedText.substring(0, 100)}${selectedText.length > 100 ? '...' : ''}"
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(analysisPanel);
+
+    // Add close button functionality
+    const closeBtn = analysisPanel.querySelector('#close-analysis-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.removeExistingAnalysisDisplay();
+        this.removeExistingHighlights();
+      });
+    }
+
+    // Auto-close after 30 seconds
+    setTimeout(() => {
+      if (document.getElementById('going-bananas-analysis-panel')) {
+        this.removeExistingAnalysisDisplay();
+        this.removeExistingHighlights();
+      }
+    }, 30000);
+  }
+
+  private addWidgetAnimationStyles(): void {
+    if (document.getElementById('going-bananas-widget-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'going-bananas-widget-styles';
+    style.textContent = `
+      @keyframes going-bananas-widget-appear {
+        from {
+          opacity: 0;
+          transform: translateY(-20px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      
+      #going-bananas-analysis-panel {
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+      }
+      
+      #going-bananas-analysis-panel::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      #going-bananas-analysis-panel::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+      
+      #going-bananas-analysis-panel::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      
+      #going-bananas-analysis-panel::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  private addAnalysisPanelAnimation(): void {
+    // Use the new widget animation styles
+    this.addWidgetAnimationStyles();
+  }
+
+  private removeExistingAnalysisDisplay(): void {
+    const existingPanel = document.getElementById('going-bananas-analysis-panel');
+    if (existingPanel) {
+      existingPanel.remove();
+    }
+  }
+
+  private getRiskColor(riskLevel: string): string {
+    switch (riskLevel?.toLowerCase()) {
+      case 'low': return '#10b981';
+      case 'medium': return '#f59e0b';
+      case 'high': return '#ef4444';
+      default: return '#6b7280';
+    }
+  }
+
+  private getRiskIcon(riskLevel: string): string {
+    switch (riskLevel?.toLowerCase()) {
+      case 'low': return '✅';
+      case 'medium': return '⚠️';
+      case 'high': return '🚨';
+      default: return '❓';
+    }
+  }
+
+  // Loading and Error Display Methods
+  private showAnalysisLoadingIndicator(): void {
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.id = 'going-bananas-loading-indicator';
+    loadingIndicator.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 20px 30px;
+      border-radius: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    `;
+    
+    loadingIndicator.innerHTML = `
+      <div style="
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top: 2px solid #ff8a00;
+        border-radius: 50%;
+        animation: going-bananas-spin 1s linear infinite;
+      "></div>
+      <span>Analyzing selected text...</span>
+    `;
+
+    document.body.appendChild(loadingIndicator);
+    this.addLoadingAnimation();
+  }
+
+  private hideAnalysisLoadingIndicator(): void {
+    const loadingIndicator = document.getElementById('going-bananas-loading-indicator');
+    if (loadingIndicator) {
+      loadingIndicator.remove();
+    }
+  }
+
+  private addLoadingAnimation(): void {
+    if (document.getElementById('going-bananas-loading-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'going-bananas-loading-styles';
+    style.textContent = `
+      @keyframes going-bananas-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  private showAnalysisError(error: any): void {
+    const errorPanel = document.createElement('div');
+    errorPanel.id = 'going-bananas-error-panel';
+    errorPanel.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+      padding: 24px 32px;
+      border-radius: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      z-index: 999999;
+      max-width: 450px;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(239, 68, 68, 0.4);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    `;
+    
+    errorPanel.innerHTML = `
+      <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+      <div style="font-weight: 700; margin-bottom: 12px; font-size: 18px;">Analysis Failed</div>
+      <div style="opacity: 0.9; margin-bottom: 8px; line-height: 1.4;">${error.message || 'An error occurred while analyzing the text'}</div>
+      ${error.details ? `<div style="opacity: 0.8; font-size: 13px; margin-bottom: 16px; line-height: 1.3;">${error.details}</div>` : ''}
+      <button id="close-error-btn" style="
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        margin-top: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">Close</button>
+    `;
+
+    document.body.appendChild(errorPanel);
+
+    // Add close button functionality
+    const closeBtn = errorPanel.querySelector('#close-error-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        errorPanel.remove();
+        // Also remove any highlights when closing error
+        this.removeExistingHighlights();
+      });
+    }
+
+    // Auto-close after 8 seconds (increased from 5)
+    setTimeout(() => {
+      if (document.getElementById('going-bananas-error-panel')) {
+        errorPanel.remove();
+        this.removeExistingHighlights();
+      }
+    }, 8000);
+  }
+
+  private showInSituAnalysisResults(analysis: any, selectedText: string): void {
+    console.log('🎨 Creating analysis widget with data:', analysis);
+    
+    // Remove any existing analysis display
+    this.removeExistingAnalysisDisplay();
+    
+    // Get the position of the highlighted text
+    const highlightedElement = document.querySelector('.going-bananas-highlight');
+    let position = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+    
+    if (highlightedElement) {
+      const rect = highlightedElement.getBoundingClientRect();
+      position = {
+        top: `${rect.bottom + window.scrollY + 20}px`,
+        left: `${rect.left + window.scrollX}px`,
+        transform: 'none'
+      };
+      console.log('📍 Positioned widget near highlighted text:', position);
+    } else {
+      console.log('📍 No highlighted element found, centering widget');
+    }
+    
+    // Create the styled analysis widget matching the extension design
+    const analysisWidget = document.createElement('div');
+    analysisWidget.id = 'going-bananas-analysis-panel';
+    analysisWidget.style.cssText = `
+      position: fixed;
+      top: ${position.top};
+      left: ${position.left};
+      transform: ${position.transform};
+      width: 400px;
+      max-height: 80vh;
+      background: linear-gradient(135deg, #7c3aed, #3b82f6);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      z-index: 999998;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      animation: going-bananas-widget-appear 0.4s ease-out;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+    `;
+
+    // Add the widget animation styles
+    this.addWidgetAnimationStyles();
+
+    const riskColor = this.getRiskColor(analysis.risk_level);
+    const riskIcon = this.getRiskIcon(analysis.risk_level);
+
+    analysisWidget.innerHTML = `
+      <!-- Header matching extension design -->
+      <div style="
+        background: linear-gradient(135deg, #fb923c, #ec4899);
+        color: white;
+        padding: 16px;
+        position: relative;
+      ">
+        <button id="close-analysis-btn" style="
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          cursor: pointer;
+          font-size: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">×</button>
+        
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <span style="font-size: 28px;">🍌</span>
+          <div>
+            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">Going Bananas</h3>
+            <p style="margin: 0; font-size: 13px; opacity: 0.9;">Analysis Complete</p>
+          </div>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 20px;">
+          <div style="text-align: center;">
+            <div style="font-size: 32px; font-weight: bold;">${analysis.risk_score?.toFixed(1) || 'N/A'}</div>
+            <div style="font-size: 12px; opacity: 0.9; font-weight: 500;">Risk Score</div>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-size: 20px;">${riskIcon}</span>
+              <div style="font-size: 16px; font-weight: 600;">${analysis.risk_level?.toUpperCase() || 'UNKNOWN'} RISK</div>
+            </div>
+            <div style="font-size: 13px; opacity: 0.9;">${analysis.clause_type || 'general'} clause • ${analysis.user_impact || 'moderate'} impact</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Content area with white background -->
+      <div style="
+        background: white;
+        padding: 20px;
+        max-height: 60vh;
+        overflow-y: auto;
+      ">
+        <!-- Summary Section -->
+        <div style="margin-bottom: 20px;">
+          <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">📋</span>
+            Summary
+          </h4>
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #4b5563; background: #f9fafb; padding: 12px; border-radius: 8px; border-left: 4px solid #fb923c;">
+            ${analysis.summary || 'No summary available'}
+          </p>
+        </div>
+        
+        ${analysis.key_points && analysis.key_points.length > 0 ? `
+          <div style="margin-bottom: 20px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">🔍</span>
+              Key Points
+            </h4>
+            <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px;">
+              <ul style="margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.5; color: #92400e;">
+                ${analysis.key_points.slice(0, 3).map((point: string) => `<li style="margin-bottom: 4px;">${point}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        ` : ''}
+        
+        ${analysis.legal_implications && analysis.legal_implications.length > 0 ? `
+          <div style="margin-bottom: 20px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">⚖️</span>
+              Legal Implications
+            </h4>
+            <div style="background: #fef2f2; border: 1px solid #f87171; border-radius: 8px; padding: 12px;">
+              <ul style="margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.5; color: #991b1b;">
+                ${analysis.legal_implications.slice(0, 3).map((implication: string) => `<li style="margin-bottom: 4px;">${implication}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        ` : ''}
+        
+        ${analysis.recommendations && analysis.recommendations.length > 0 ? `
+          <div style="margin-bottom: 20px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">💡</span>
+              Recommendations
+            </h4>
+            <div style="background: #f0fdf4; border: 1px solid #4ade80; border-radius: 8px; padding: 12px;">
+              <ul style="margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.5; color: #166534;">
+                ${analysis.recommendations.slice(0, 3).map((rec: string) => `<li style="margin-bottom: 4px;">${rec}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- Selected Text Preview -->
+        <div style="
+          background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+          padding: 16px;
+          border-radius: 12px;
+          border: 2px solid #d1d5db;
+          font-size: 13px;
+          color: #374151;
+          position: relative;
+        ">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; color: #1f2937;">
+            <span style="font-size: 16px;">📝</span>
+            Selected Text
+          </div>
+          <div style="font-style: italic; line-height: 1.4;">
+            "${selectedText.substring(0, 100)}${selectedText.length > 100 ? '...' : ''}"
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(analysisWidget);
+    console.log('✅ Analysis widget added to DOM');
+
+    // Add close button functionality
+    const closeBtn = analysisWidget.querySelector('#close-analysis-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.removeExistingAnalysisDisplay();
+        this.removeExistingHighlights();
+      });
+    }
+
+    // Auto-close after 45 seconds
+    setTimeout(() => {
+      if (document.getElementById('going-bananas-analysis-panel')) {
+        this.removeExistingAnalysisDisplay();
+        this.removeExistingHighlights();
+      }
+    }, 45000);
   }
 }
 
