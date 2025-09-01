@@ -1318,16 +1318,21 @@ class TermsAnalyzer {
     }
   }
 
+  private boundHandleTextSelection: () => void;
+
   private attachSelectionListeners(): void {
     console.log('🎧 Attaching text selection listeners');
-    document.addEventListener('mouseup', this.handleTextSelection.bind(this));
-    document.addEventListener('keyup', this.handleTextSelection.bind(this));
+    this.boundHandleTextSelection = this.handleTextSelection.bind(this);
+    document.addEventListener('mouseup', this.boundHandleTextSelection);
+    document.addEventListener('keyup', this.boundHandleTextSelection);
     console.log('✅ Selection listeners attached');
   }
 
   private removeSelectionListeners(): void {
-    document.removeEventListener('mouseup', this.handleTextSelection.bind(this));
-    document.removeEventListener('keyup', this.handleTextSelection.bind(this));
+    if (this.boundHandleTextSelection) {
+      document.removeEventListener('mouseup', this.boundHandleTextSelection);
+      document.removeEventListener('keyup', this.boundHandleTextSelection);
+    }
     
     // Reset page padding
     document.body.style.paddingTop = '';
