@@ -219,7 +219,7 @@ export const Popup: React.FC = () => {
                   ? 'bg-white/30 text-white' 
                   : 'hover:bg-white/20'
               }`}
-              title={toolbarActive ? 'Hide Text Selector' : 'Show Text Selector'}
+              title={toolbarActive ? 'Hide Hover Analysis' : 'Show Hover Analysis'}
             >
               <Edit3 className="w-5 h-5" />
             </button>
@@ -232,13 +232,13 @@ export const Popup: React.FC = () => {
           </div>
         </div>
 
-        {/* Toolbar Status and Selected Text Display */}
+        {/* Toolbar Status and Hover Analysis Display */}
         {toolbarActive && (
           <div className="mt-3 p-3 bg-white/20 rounded-lg">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Text Selector Active</span>
+              <span className="text-sm font-medium">Hover Analysis Active</span>
               <span className="text-xs bg-white/20 px-2 py-1 rounded">
-                {selectedText ? `${selectedText.length} chars` : 'No text selected'}
+                {selectedText ? `${selectedText.length} chars` : 'Ready to analyze'}
               </span>
             </div>
             
@@ -258,7 +258,7 @@ export const Popup: React.FC = () => {
             
             {!selectedText && (
               <div className="text-xs text-white/80">
-                💡 Select any text on the page to analyze it
+                💡 Hover over any text on the page to analyze it
               </div>
             )}
           </div>

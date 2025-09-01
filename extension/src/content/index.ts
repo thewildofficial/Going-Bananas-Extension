@@ -1283,13 +1283,13 @@ class TermsAnalyzer {
         ">
           <div style="display: flex; align-items: center; gap: 12px;">
             <span style="font-size: 18px;">🍌</span>
-            <span style="font-weight: 600;">Text Selector Active</span>
+            <span style="font-weight: 600;">Hover Analysis Active</span>
             <span id="selected-text-info" style="
               background: rgba(255,255,255,0.2);
               padding: 4px 8px;
               border-radius: 12px;
               font-size: 12px;
-            ">Select text to analyze</span>
+            ">Hover over text to analyze</span>
           </div>
           <button id="close-toolbar-btn" style="
             background: rgba(255,255,255,0.2);
@@ -1322,28 +1322,250 @@ class TermsAnalyzer {
   }
 
   private attachSelectionListeners(): void {
-    console.log('🎧 Attaching text selection listeners');
-    this.boundHandleTextSelection = this.handleTextSelection.bind(this);
-    document.addEventListener('mouseup', this.boundHandleTextSelection);
-    document.addEventListener('keyup', this.boundHandleTextSelection);
-    console.log('✅ Selection listeners attached');
+    console.log('🎧 Attaching hover-based analysis listeners');
+    this.attachHoverListeners();
+    console.log('✅ Hover listeners attached');
+  }
+
+  private attachHoverListeners(): void {
+    // Target elements that are good for analysis - be more selective
+    const selectors = [
+      'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+      'article', 'section', 'main', 
+      'div[class*="terms"]', 'div[class*="policy"]', 'div[class*="clause"]',
+      'div[class*="content"]:not([class*="nav"]):not([class*="menu"]):not([class*="header"]):not([class*="footer"])',
+      'li:not([class*="nav"]):not([class*="menu"])',
+      'blockquote'
+    ];
+
+    selectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        // Additional filtering to avoid navigation and UI elements
+        if (this.isGoodForAnalysis(element as HTMLElement)) {
+          this.addHoverListenersToElement(element as HTMLElement);
+        }
+      });
+    });
+
+    // Also listen for dynamically added content
+    this.observeNewElements();
+  }
+
+  private isGoodForAnalysis(element: HTMLElement): boolean {
+    // Skip navigation, menus, headers, footers, and other UI elements
+    const className = element.className.toLowerCase();
+    const id = element.id.toLowerCase();
+    
+    if (className.includes('nav') || className.includes('menu') || 
+        className.includes('header') || className.includes('footer') ||
+        className.includes('sidebar') || className.includes('widget') ||
+        id.includes('nav') || id.includes('menu') || 
+        id.includes('header') || id.includes('footer')) {
+      return false;
+    }
+
+    // Skip if element is too small
+    if (element.textContent?.trim().length < 50) {
+      return false;
+    }
+
+    // Skip if element is mostly links or buttons
+    const links = element.querySelectorAll('a, button');
+    if (links.length > element.textContent?.length / 10) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private addHoverListenersToElement(element: HTMLElement): void {
+    // Skip if already has listeners, too small, or is nested inside another analyzed element
+    if (element.dataset.bananaHover || 
+        element.textContent?.trim().length < 50 ||
+        element.closest('[data-banana-hover="true"]')) {
+      return;
+    }
+
+    // Skip if element is inside a larger analyzed element
+    const parentWithHover = element.closest('[data-banana-hover="true"]');
+    if (parentWithHover) {
+      return;
+    }
+
+    element.dataset.bananaHover = 'true';
+    
+    element.addEventListener('mouseenter', (e) => {
+      this.handleElementHover(e.target as HTMLElement);
+    });
+
+    element.addEventListener('mouseleave', (e) => {
+      this.handleElementLeave(e.target as HTMLElement);
+    });
+
+    element.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.analyzeHoveredElement(e.target as HTMLElement);
+    });
+  }
+
+  private observeNewElements(): void {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as HTMLElement;
+            const selectors = [
+              'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+              'div[class*="content"]', 'div[class*="text"]', 'div[class*="section"]',
+              'article', 'section', 'main', 'div[class*="terms"]', 'div[class*="policy"]',
+              'li', 'blockquote', 'div[class*="clause"]'
+            ];
+
+            selectors.forEach(selector => {
+              if (element.matches(selector)) {
+                this.addHoverListenersToElement(element);
+              }
+              // Also check children
+              element.querySelectorAll(selector).forEach(child => {
+                this.addHoverListenersToElement(child as HTMLElement);
+              });
+            });
+          }
+        });
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 
   private removeSelectionListeners(): void {
-    if (this.boundHandleTextSelection) {
-      document.removeEventListener('mouseup', this.boundHandleTextSelection);
-      document.removeEventListener('keyup', this.boundHandleTextSelection);
-    }
+    // Remove hover overlays
+    this.removeAllHoverOverlays();
     
     // Reset page padding
     document.body.style.paddingTop = '';
   }
 
+  private handleElementHover(element: HTMLElement): void {
+    // Skip if element is too small or already has hover effect
+    if (element.textContent?.trim().length < 50 || element.dataset.bananaHovering === 'true') {
+      return;
+    }
+
+    element.dataset.bananaHovering = 'true';
+    
+    // Add translucent border and background
+    element.style.border = '2px solid rgba(255, 138, 0, 0.6)';
+    element.style.backgroundColor = 'rgba(255, 138, 0, 0.1)';
+    element.style.borderRadius = '8px';
+    element.style.transition = 'all 0.2s ease';
+    element.style.cursor = 'pointer';
+    element.style.position = 'relative';
+    
+    // Add a subtle glow effect
+    element.style.boxShadow = '0 0 15px rgba(255, 138, 0, 0.3)';
+    
+    // Create the "Click to analyze" tooltip
+    this.createHoverTooltip(element);
+  }
+
+  private handleElementLeave(element: HTMLElement): void {
+    // Remove hover effects
+    element.style.border = '';
+    element.style.backgroundColor = '';
+    element.style.borderRadius = '';
+    element.style.boxShadow = '';
+    element.style.cursor = '';
+    element.dataset.bananaHovering = 'false';
+    
+    // Remove tooltip
+    const tooltip = element.querySelector('.banana-hover-tooltip');
+    if (tooltip) {
+      tooltip.remove();
+    }
+  }
+
+  private createHoverTooltip(element: HTMLElement): void {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'banana-hover-tooltip';
+    tooltip.innerHTML = `
+      <span class="banana-tooltip-icon">🍌</span>
+      <span class="banana-tooltip-text">Click to analyze</span>
+    `;
+
+    // Style the tooltip
+    tooltip.style.cssText = `
+      position: absolute;
+      top: -35px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 138, 0, 0.95);
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      z-index: 10000;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    `;
+
+    // Style the content
+    const icon = tooltip.querySelector('.banana-tooltip-icon') as HTMLElement;
+    icon.style.cssText = `
+      margin-right: 4px;
+      font-size: 12px;
+    `;
+
+    // Add to element
+    element.appendChild(tooltip);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      tooltip.style.opacity = '1';
+    });
+  }
+
+  private removeAllHoverOverlays(): void {
+    const overlays = document.querySelectorAll('.banana-hover-overlay');
+    overlays.forEach(overlay => overlay.remove());
+  }
+
+  private analyzeHoveredElement(element: HTMLElement): void {
+    const text = element.textContent?.trim();
+    if (!text || text.length < 10) {
+      return;
+    }
+
+    // Remove any existing overlays
+    this.removeAllHoverOverlays();
+
+    // Store the text for analysis
+    this.selectedTextForAnalysis = text;
+    console.log('🎯 Analyzing hovered element:', text.substring(0, 100) + '...');
+
+    // Show loading indicator
+    this.showLoadingIndicator(element);
+
+    // Send analysis request
+    this.analyzeSelectedText(text, element);
+  }
+
+  // Legacy text selection handler - hover-based analysis is now primary
   private handleTextSelection(): void {
     const selectedText = this.getSelectedText();
     const infoElement = document.getElementById('selected-text-info');
     
-    console.log('🔍 Text selection handler called:', { selectedText: selectedText?.substring(0, 50), length: selectedText?.length });
+    console.log('🔍 Legacy text selection handler called:', { selectedText: selectedText?.substring(0, 50), length: selectedText?.length });
     
     // Check if selection is from extension popup or other extension elements
     if (this.isSelectionFromExtensionElement()) {
@@ -1351,66 +1573,32 @@ class TermsAnalyzer {
       return;
     }
     
-    if (infoElement) {
-      if (selectedText && selectedText.length > 0) {
-        console.log('✅ Text selected, updating UI and showing button');
-        
-        // Enhanced visual feedback for text selection
-        infoElement.textContent = `${selectedText.length} characters selected`;
-        infoElement.style.background = 'rgba(255,255,255,0.4)';
-        infoElement.style.border = '2px solid rgba(255,255,255,0.6)';
-        infoElement.style.transform = 'scale(1.05)';
-        infoElement.style.transition = 'all 0.3s ease';
-        
-        // Add a subtle glow effect to the toolbar
-        const toolbar = document.getElementById('going-bananas-toolbar');
-        if (toolbar) {
-          toolbar.style.boxShadow = '0 4px 20px rgba(255, 138, 0, 0.4)';
-          toolbar.style.borderBottom = '3px solid rgba(255,255,255,0.4)';
-        }
-        
-        // Send selected text to popup
-        chrome.runtime.sendMessage({ 
-          action: 'textSelected', 
-          text: selectedText 
-        });
+    if (infoElement && selectedText && selectedText.length > 0) {
+      console.log('✅ Text selected via legacy method, updating UI');
+      
+      // Update UI to show selected text
+      infoElement.textContent = `${selectedText.length} characters selected`;
+      infoElement.style.background = 'rgba(255,255,255,0.4)';
+      infoElement.style.border = '2px solid rgba(255,255,255,0.6)';
+      infoElement.style.transform = 'scale(1.05)';
+      infoElement.style.transition = 'all 0.3s ease';
+      
+      // Send selected text to popup
+      chrome.runtime.sendMessage({ 
+        action: 'textSelected', 
+        text: selectedText 
+      });
 
-        // Show contextual analyze button on the page with a slight delay for better UX
-        console.log('🎯 Attempting to show contextual analyze button');
-        setTimeout(() => {
-          this.showContextualAnalyzeButton(selectedText);
-        }, 200);
-        
-        // Store the selected text for analysis (non-invasive approach)
-        this.selectedTextForAnalysis = selectedText;
-        
-      } else {
-        // Check if we have a contextual button that should be preserved
-        const contextualButton = document.getElementById('going-bananas-contextual-analyze');
-        if (contextualButton) {
-          console.log('ℹ️ Selection cleared but contextual button exists - preserving button');
-          return; // Don't remove the button if it exists
-        }
-        
-        console.log('❌ No text selected, hiding button');
-        infoElement.textContent = 'Select text to analyze';
-        infoElement.style.background = 'rgba(255,255,255,0.2)';
-        infoElement.style.border = 'none';
-        infoElement.style.transform = 'scale(1)';
-        
-        // Reset toolbar styling
-        const toolbar = document.getElementById('going-bananas-toolbar');
-        if (toolbar) {
-          toolbar.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-          toolbar.style.borderBottom = '2px solid rgba(255,255,255,0.2)';
-        }
-        
-        // Remove contextual button when no text is selected
-        this.removeContextualAnalyzeButton();
-        this.selectedTextForAnalysis = '';
-      }
-    } else {
-      console.log('❌ Info element not found - toolbar might not be active');
+      // Store the selected text for analysis
+      this.selectedTextForAnalysis = selectedText;
+    } else if (infoElement) {
+      // Reset UI when no text selected
+      infoElement.textContent = 'Hover over text to analyze';
+      infoElement.style.background = 'rgba(255,255,255,0.2)';
+      infoElement.style.border = 'none';
+      infoElement.style.transform = 'scale(1)';
+      
+      this.selectedTextForAnalysis = '';
     }
   }
 
