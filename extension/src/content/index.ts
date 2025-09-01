@@ -1116,6 +1116,8 @@ class TermsAnalyzer {
   private async sendForAnalysis(text: string): Promise<any> {
     try {
       const apiUrl = await getApiUrl();
+      console.log('🔗 Using API URL:', apiUrl);
+      
       const payload = {
         text: text,
         url: this.currentUrl,
@@ -1130,6 +1132,12 @@ class TermsAnalyzer {
         }
       };
 
+      console.log('📤 Sending analysis request:', {
+        url: `${apiUrl}/analyze`,
+        textLength: text.length,
+        currentUrl: this.currentUrl
+      });
+
       const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
@@ -1138,21 +1146,52 @@ class TermsAnalyzer {
         body: JSON.stringify(payload)
       });
 
+      console.log('📥 API Response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText
+        });
+        throw new Error(`API request failed: ${response.status} - ${response.statusText}`);
       }
 
       const result = await response.json();
+      console.log('✅ API Response received:', {
+        success: result.success,
+        hasAnalysis: !!result.analysis,
+        mock: result.analysis?.mock,
+        riskScore: result.analysis?.risk_score
+      });
 
-      if (result.success) {
+      if (result.success && result.analysis) {
+        console.log('🎉 Using real Gemini analysis data');
         return result.analysis;
       } else {
-        throw new Error(result.error || 'Analysis failed');
+        console.error('❌ API returned unsuccessful response:', result);
+        throw new Error(result.error || 'Analysis failed - no analysis data returned');
       }
     } catch (error) {
-      console.error('Failed to send for analysis:', error);
+      console.error('❌ Failed to send for analysis:', {
+        error: error.message,
+        stack: error.stack,
+        textLength: text.length
+      });
       
-      return this.getMockAnalysis(text);
+      // Only fall back to mock data for specific error types
+      if (error.message.includes('Failed to fetch') || 
+          error.message.includes('NetworkError') ||
+          error.message.includes('CORS') ||
+          error.message.includes('timeout')) {
+        console.log('🔄 Network error detected, falling back to mock analysis');
+        return this.getMockAnalysis(text);
+      } else {
+        // For other errors, re-throw to let the caller handle it
+        console.log('🚨 Non-network error, not falling back to mock data');
+        throw error;
+      }
     }
   }
 
@@ -1300,6 +1339,12 @@ class TermsAnalyzer {
     
     console.log('🔍 Text selection handler called:', { selectedText: selectedText?.substring(0, 50), length: selectedText?.length });
     
+    // Check if selection is from extension popup or other extension elements
+    if (this.isSelectionFromExtensionElement()) {
+      console.log('🚫 Selection is from extension element, ignoring');
+      return;
+    }
+    
     if (infoElement) {
       if (selectedText && selectedText.length > 0) {
         console.log('✅ Text selected, updating UI and showing button');
@@ -1368,9 +1413,61 @@ class TermsAnalyzer {
     return selection ? selection.toString().trim() : '';
   }
 
+  private isSelectionFromExtensionElement(): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    const container = range.commonAncestorContainer;
+    
+    // Check if the selection is within any extension-related elements
+    const extensionSelectors = [
+      'going-bananas-toolbar',
+      'going-bananas-contextual-analyze',
+      'going-bananas-analysis-widget',
+      'going-bananas-popup',
+      'going-bananas-overlay',
+      '[data-extension="going-bananas"]',
+      '.going-bananas-extension'
+    ];
+
+    // Check if the container or any parent element matches extension selectors
+    let element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
+    
+    while (element) {
+      // Check if element has extension-related ID or class
+      if (element.id && extensionSelectors.some(selector => element.id.includes('going-bananas'))) {
+        return true;
+      }
+      
+      // Check if element has extension-related classes
+      if (element.className && typeof element.className === 'string' && 
+          element.className.includes('going-bananas')) {
+        return true;
+      }
+      
+      // Check if element has extension data attribute
+      if (element.hasAttribute && element.hasAttribute('data-extension')) {
+        return true;
+      }
+      
+      element = element.parentElement;
+    }
+
+    return false;
+  }
+
   // Contextual Analyze Button Methods
   private showContextualAnalyzeButton(selectedText: string): void {
     console.log('🎯 showContextualAnalyzeButton called with text:', selectedText.substring(0, 50));
+    
+    // Don't show button if text is too short
+    if (selectedText.length < 10) {
+      console.log('🚫 Text too short for analysis, not showing button');
+      return;
+    }
     
     // Remove any existing contextual button
     this.removeContextualAnalyzeButton();
@@ -1595,13 +1692,26 @@ class TermsAnalyzer {
     try {
       console.log('📡 Sending request to backend...');
       
+      // Validate selected text length before sending
+      if (selectedText.length < 10) {
+        throw new Error(`Selected text is too short (${selectedText.length} characters). Please select at least 10 characters for analysis.`);
+      }
+      
+      if (selectedText.length > 5000) {
+        throw new Error(`Selected text is too long (${selectedText.length} characters). Please select text with 5000 characters or less.`);
+      }
+      
       // Get current tab URL for context
       const currentUrl = window.location.href;
       
       // Try the new selected text analysis endpoint first
+      const apiUrl = await getApiUrl();
+      console.log('🔗 Using API URL for selected text analysis:', apiUrl);
+      
       let response;
       try {
-        response = await fetch('http://localhost:3000/api/analyze/selected-text', {
+        console.log('📤 Trying selected text analysis endpoint...');
+        response = await fetch(`${apiUrl}/analyze/selected-text`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1619,10 +1729,10 @@ class TermsAnalyzer {
             }
           }),
         });
+        console.log('✅ Selected text endpoint response status:', response.status);
       } catch (fetchError) {
-        console.log('⚠️ Selected text endpoint failed, trying main analysis endpoint');
+        console.log('⚠️ Selected text endpoint failed, trying main analysis endpoint:', fetchError.message);
         // Fallback to main analysis endpoint
-        const apiUrl = await getApiUrl();
         response = await fetch(`${apiUrl}/analyze`, {
           method: 'POST',
           headers: {
@@ -1642,6 +1752,7 @@ class TermsAnalyzer {
             }
           }),
         });
+        console.log('✅ Main analysis endpoint response status:', response.status);
       }
 
       console.log('📡 Response status:', response.status);
@@ -1651,7 +1762,13 @@ class TermsAnalyzer {
       }
 
       const result = await response.json();
-      console.log('✅ Analysis completed:', result);
+      console.log('✅ Analysis completed:', {
+        success: result.success,
+        hasAnalysis: !!result.analysis,
+        mock: result.analysis?.mock,
+        riskScore: result.analysis?.risk_score,
+        analysisType: result.analysis?.analysis_type
+      });
       
       // Hide loading indicator
       this.hideAnalysisLoadingIndicator();
@@ -1659,6 +1776,11 @@ class TermsAnalyzer {
       
       // Show the analysis results in situ
       console.log('🎨 Showing analysis widget...');
+      if (result.analysis?.mock) {
+        console.log('⚠️ Using mock analysis data for selected text');
+      } else {
+        console.log('🎉 Using real Gemini analysis data for selected text');
+      }
       this.showInSituAnalysisResults(result.analysis || result, selectedText);
       console.log('✅ Analysis widget should now be visible');
       
@@ -1666,11 +1788,42 @@ class TermsAnalyzer {
       console.error('❌ Error analyzing selected text:', error);
       this.hideAnalysisLoadingIndicator();
       
-      // Show a more user-friendly error message
-      const friendlyError = {
-        message: error instanceof Error ? error.message : 'Analysis failed',
-        details: 'Unable to analyze the selected text. Please try again or check your connection.'
-      };
+      // Show a more user-friendly error message based on error type
+      let friendlyError;
+      
+      if (error instanceof Error) {
+        if (error.message.includes('too short')) {
+          friendlyError = {
+            message: 'Text Too Short',
+            details: error.message
+          };
+        } else if (error.message.includes('too long')) {
+          friendlyError = {
+            message: 'Text Too Long', 
+            details: error.message
+          };
+        } else if (error.message.includes('400')) {
+          friendlyError = {
+            message: 'Invalid Request',
+            details: 'The selected text could not be processed. Please try selecting different text or check that the text is valid.'
+          };
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          friendlyError = {
+            message: 'Connection Error',
+            details: 'Unable to connect to the analysis service. Please check your internet connection and try again.'
+          };
+        } else {
+          friendlyError = {
+            message: 'Analysis Failed',
+            details: error.message
+          };
+        }
+      } else {
+        friendlyError = {
+          message: 'Analysis Failed',
+          details: 'Unable to analyze the selected text. Please try again or check your connection.'
+        };
+      }
       
       this.showAnalysisError(friendlyError);
     }
