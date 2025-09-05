@@ -1,18 +1,31 @@
 import { getApiUrl } from '../utils/config';
 
 class TermsAnalyzer {
-  private static readonly AUTO_HIDE_TIMEOUT_MS = 15000;
-  
   private isAnalyzing = false;
   private currentUrl = window.location.href;
-  private selectedTextForAnalysis: string = '';
-  private boundHandleTextSelection: () => void;
-  private hoverDetectionActive = false;
 
   public hasInjectedStyles = false;
   public selectedSentenceEl: HTMLElement | null = null;
   public tooltipEl: HTMLElement | null = null;
   public firstRunGuideShown = false;
+
+  // Block selection properties
+  private blockSelectorActive = false;
+  private selectedBlocks: Array<{
+    id: string, 
+    text: string, 
+    element: string,
+    domElement: HTMLElement,
+    originalStyles: {
+      border: string,
+      backgroundColor: string
+    }
+  }> = [];
+  private selectableElements: HTMLElement[] = [];
+  private blockSelectorToolbar: HTMLElement | null = null;
+  private lastSelectedBlockIndex: number = -1; // Track last selected block for range selection
+  private extensionCheckInterval: number | null = null;
+  private boundClickHandler: ((event: Event) => void) | null = null;
 
   constructor() {
     this.init();
@@ -24,6 +37,25 @@ class TermsAnalyzer {
       return true;
     });
 
+    // Listen for extension context invalidation (popup closed)
+    chrome.runtime.onConnect.addListener((port) => {
+      port.onDisconnect.addListener(() => {
+        if (this.blockSelectorActive) {
+          console.log('🔌 Extension disconnected, cleaning up block selector');
+          this.hideBlockSelector();
+        }
+      });
+    });
+
+    // Listen for page visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.blockSelectorActive) {
+        console.log('👁️ Page became hidden, maintaining block selector state');
+        // Keep block selector active even when page is hidden
+      }
+    });
+
+    // Auto-detect terms when page loads
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => this.autoDetectTerms());
     } else {
@@ -70,36 +102,22 @@ class TermsAnalyzer {
           sendResponse({ success: true, message: 'Auto-analysis triggered' });
           break;
 
-        case 'showToolbar':
-          this.showTextSelectionToolbar();
-          sendResponse({ success: true, message: 'Toolbar activated' });
+        case 'showBlockSelector':
+          this.showBlockSelector();
+          sendResponse({ success: true, message: 'Block selector activated' });
           break;
 
-        case 'hideToolbar':
-          this.hideTextSelectionToolbar();
-          sendResponse({ success: true, message: 'Toolbar deactivated' });
+        case 'hideBlockSelector':
+          this.hideBlockSelector();
+          sendResponse({ success: true, message: 'Block selector deactivated' });
           break;
 
-        case 'getSelectedText':
-          const selectedText = this.getSelectedText();
-          sendResponse({ success: true, selectedText: selectedText });
-          break;
-
-        case 'updateAnalysisResult':
+        case 'showSelectedBlocksAnalysis':
           if (message.data) {
-            this.showAnalysisNotification(message.data);
-            sendResponse({ success: true, message: 'Analysis result updated' });
+            this.showBlockAnalysisResult(message.data, message.selectedBlocks);
+            sendResponse({ success: true, message: 'Analysis result displayed' });
           } else {
             sendResponse({ success: false, error: 'No analysis data provided' });
-          }
-          break;
-
-        case 'showSelectedTextAnalysis':
-          if (message.data && message.selectedText) {
-            this.showSelectedTextAnalysis(message.data, message.selectedText);
-            sendResponse({ success: true, message: 'Selected text analysis displayed' });
-          } else {
-            sendResponse({ success: false, error: 'No analysis data or selected text provided' });
           }
           break;
 
@@ -432,6 +450,7 @@ class TermsAnalyzer {
   }
 
   private showAnalysisNotification(analysis: any): void {
+    console.log('🚀 Displaying analysis notification');
     this.hideExistingNotifications();
     
     const riskColor = this.getRiskColor(analysis.risk_level);
@@ -440,7 +459,28 @@ class TermsAnalyzer {
     const notification = document.createElement('div');
     notification.id = 'going-bananas-result';
     notification.className = 'going-bananas-result-notification';
-    notification.style.borderLeft = `4px solid ${riskColor}`;
+    
+    // Apply critical styles inline to ensure visibility
+    notification.style.cssText = `
+      position: fixed !important;
+      top: 20px !important;
+      right: 20px !important;
+      background: white !important;
+      color: #333 !important;
+      padding: 16px !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important;
+      z-index: 10001 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      font-size: 14px !important;
+      max-width: 300px !important;
+      cursor: pointer !important;
+      transition: all 0.3s ease !important;
+      border-left: 4px solid ${riskColor} !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    `;
     
     const categories = analysis.categories || {};
     const categoriesHtml = this.buildCategoriesDisplay(categories);
@@ -479,15 +519,53 @@ class TermsAnalyzer {
       }
     });
     
+    console.log('📋 About to append notification to document.body');
     document.body.appendChild(notification);
+    console.log('✅ Analysis popup displayed successfully');
     
+    // For analysis results, make the notification more prominent and persistent
+    // Auto-hide only after 20 seconds instead of 12, and only if not expanded
     setTimeout(() => {
       if (notification.parentNode && !isExpanded) {
+        console.log('🕒 Popup auto-hiding after 20 seconds, exiting block selection mode');
+        this.hideBlockSelector();
+        
         notification.style.opacity = '0';
         notification.style.transform = 'translateX(100%)';
         setTimeout(() => notification.remove(), 300);
       }
-    }, 12000);
+    }, 20000);
+    
+    // Add a close button for manual dismissal
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '×';
+    closeBtn.style.cssText = `
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.1);
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notification.style.opacity = '0';
+      notification.style.transform = 'translateX(100%)';
+      
+      // Exit block selection mode entirely when popup is manually closed
+      console.log('🧹 Popup closed manually, exiting block selection mode');
+      this.hideBlockSelector();
+      
+      setTimeout(() => notification.remove(), 300);
+    });
+    notification.appendChild(closeBtn);
   }
 
   private buildCategoriesDisplay(categories: any): string {
@@ -1120,8 +1198,6 @@ class TermsAnalyzer {
   private async sendForAnalysis(text: string): Promise<any> {
     try {
       const apiUrl = await getApiUrl();
-      console.log('🔗 Using API URL:', apiUrl);
-      
       const payload = {
         text: text,
         url: this.currentUrl,
@@ -1136,12 +1212,6 @@ class TermsAnalyzer {
         }
       };
 
-      console.log('📤 Sending analysis request:', {
-        url: `${apiUrl}/analyze`,
-        textLength: text.length,
-        currentUrl: this.currentUrl
-      });
-
       const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
@@ -1150,52 +1220,21 @@ class TermsAnalyzer {
         body: JSON.stringify(payload)
       });
 
-      console.log('📥 API Response status:', response.status, response.statusText);
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API request failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText
-        });
-        throw new Error(`API request failed: ${response.status} - ${response.statusText}`);
+        throw new Error(`API request failed: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('✅ API Response received:', {
-        success: result.success,
-        hasAnalysis: !!result.analysis,
-        mock: result.analysis?.mock,
-        riskScore: result.analysis?.risk_score
-      });
 
-      if (result.success && result.analysis) {
-        console.log('🎉 Using real Gemini analysis data');
+      if (result.success) {
         return result.analysis;
       } else {
-        console.error('❌ API returned unsuccessful response:', result);
-        throw new Error(result.error || 'Analysis failed - no analysis data returned');
+        throw new Error(result.error || 'Analysis failed');
       }
     } catch (error) {
-      console.error('❌ Failed to send for analysis:', {
-        error: error.message,
-        stack: error.stack,
-        textLength: text.length
-      });
+      console.error('Failed to send for analysis:', error);
       
-      // Only fall back to mock data for specific error types
-      if (error.message.includes('Failed to fetch') || 
-          error.message.includes('NetworkError') ||
-          error.message.includes('CORS') ||
-          error.message.includes('timeout')) {
-        console.log('🔄 Network error detected, falling back to mock analysis');
-        return this.getMockAnalysis(text);
-      } else {
-        // For other errors, re-throw to let the caller handle it
-        console.log('🚨 Non-network error, not falling back to mock data');
-        throw error;
-      }
+      return this.getMockAnalysis(text);
     }
   }
 
@@ -1231,528 +1270,614 @@ class TermsAnalyzer {
     };
   }
 
-  // Text Selection Toolbar Methods
-  private showTextSelectionToolbar(): void {
-    console.log('📝 Activating text selection toolbar');
-    this.createToolbarIfNotExists();
-    this.attachSelectionListeners();
-    
-    // Show the toolbar
-    const toolbar = document.getElementById('going-bananas-toolbar');
-    if (toolbar) {
-      toolbar.style.display = 'block';
-      toolbar.style.opacity = '1';
-      console.log('✅ Toolbar activated and visible');
-    } else {
-      console.log('❌ Toolbar element not found');
-    }
+  // Block Selection Methods
+  private showBlockSelector(): void {
+    console.log('📝 Activating block selector mode');
+    this.blockSelectorActive = true;
+    this.createBlockSelectorToolbar();
+    this.identifySelectableBlocks();
+    this.attachBlockSelectionListeners();
+    this.startExtensionConnectionCheck();
   }
 
-  private hideTextSelectionToolbar(): void {
-    console.log('📝 Deactivating text selection toolbar');
-    this.removeSelectionListeners();
-    
-    // Hide the toolbar
-    const toolbar = document.getElementById('going-bananas-toolbar');
-    if (toolbar) {
-      toolbar.style.display = 'none';
-    }
+  private hideBlockSelector(): void {
+    console.log('📝 Deactivating block selector mode');
+    this.blockSelectorActive = false;
+    this.clearSelectedBlocks(); // This properly clears visual highlights
+    this.removeBlockSelectionListeners();
+    this.clearBlockHighlights(); // This clears hover highlights
+    this.aggressiveStyleCleanup(); // Fallback cleanup for any missed elements
+    this.removeBlockSelectorToolbar();
+    this.stopExtensionConnectionCheck();
   }
 
-  private createToolbarIfNotExists(): void {
-    let toolbar = document.getElementById('going-bananas-toolbar');
-    if (!toolbar) {
-      toolbar = document.createElement('div');
-      toolbar.id = 'going-bananas-toolbar';
-      toolbar.innerHTML = `
-        <div style="
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 999999;
-          background: linear-gradient(135deg, #ff8a00, #e52e71);
-          color: white;
-          padding: 8px 16px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-size: 14px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-          border-bottom: 2px solid rgba(255,255,255,0.2);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        ">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-size: 18px;">🍌</span>
-            <span style="font-weight: 600;">Hover Analysis Active</span>
-            <span id="selected-text-info" style="
-              background: rgba(255,255,255,0.2);
-              padding: 4px 8px;
-              border-radius: 12px;
-              font-size: 12px;
-            ">Hover over text to analyze</span>
-          </div>
-          <button id="close-toolbar-btn" style="
+  private createBlockSelectorToolbar(): void {
+    if (this.blockSelectorToolbar) {
+      this.blockSelectorToolbar.remove();
+    }
+
+    this.blockSelectorToolbar = document.createElement('div');
+    this.blockSelectorToolbar.id = 'going-bananas-block-selector-toolbar';
+    this.blockSelectorToolbar.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 999999;
+        background: linear-gradient(135deg, #ff8a00, #e52e71);
+        color: white;
+        padding: 12px 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        border-bottom: 2px solid rgba(255,255,255,0.2);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      ">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="font-size: 18px;">🍌</span>
+          <span style="font-weight: 600;">Block Selector Mode</span>
+          <span id="block-count-display" style="
+            background: rgba(255,255,255,0.25);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+          ">0 blocks selected</span>
+          <span style="
+            font-size: 11px;
+            opacity: 0.8;
+            font-style: italic;
+          ">💡 Shift+click for range selection</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button id="clear-selection-btn" style="
             background: rgba(255,255,255,0.2);
-            border: none;
+            border: 1px solid rgba(255,255,255,0.3);
             color: white;
-            padding: 6px 10px;
+            padding: 6px 12px;
             border-radius: 6px;
             cursor: pointer;
             font-size: 12px;
             font-weight: 500;
-          ">Close</button>
+          ">Clear All</button>
+          <button id="analyze-blocks-btn" style="
+            background: rgba(34, 197, 94, 0.9);
+            border: 1px solid rgba(34, 197, 94, 1);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0.5;
+            pointer-events: none;
+            transition: all 0.2s ease;
+          ">🔍 Analyze</button>
+          <button id="close-block-selector-btn" style="
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+          ">✕ Close</button>
         </div>
-      `;
-      
-      document.body.appendChild(toolbar);
-      
-      // Add close button functionality
-      const closeBtn = toolbar.querySelector('#close-toolbar-btn');
-      if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-          this.hideTextSelectionToolbar();
-          // Notify popup that toolbar was closed
-          chrome.runtime.sendMessage({ action: 'toolbarClosed' });
-        });
-      }
-      
-      // Adjust page content to account for toolbar
-      document.body.style.paddingTop = '48px';
+      </div>
+    `;
+    
+    document.body.appendChild(this.blockSelectorToolbar);
+    
+    // Add event listeners to toolbar buttons
+    const clearBtn = this.blockSelectorToolbar.querySelector('#clear-selection-btn');
+    const analyzeBtn = this.blockSelectorToolbar.querySelector('#analyze-blocks-btn');
+    const closeBtn = this.blockSelectorToolbar.querySelector('#close-block-selector-btn');
+    
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.clearSelectedBlocks());
     }
-  }
-
-  private attachSelectionListeners(): void {
-    console.log('🎧 Attaching hover-based analysis listeners');
-    this.hoverDetectionActive = true;
-    this.attachHoverListeners();
-    console.log('✅ Hover listeners attached');
-  }
-
-  private attachHoverListeners(): void {
-    // Target content boxes - entire information units
-    const selectors = [
-      'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'li', // Individual list items
-      'ul', 'ol', // Entire lists
-      'div[class*="heading"]', // Heading containers
-      'div[class*="section"]', // Section containers
-      'div[class*="clause"]', // Clause containers
-      'div[class*="term"]', // Term containers
-      'div[class*="policy"]', // Policy containers
-      'div[class*="content"]', // Content containers
-      'article', 'section' // Semantic content blocks
-    ];
-
-    selectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(element => {
-        // Additional filtering to ensure it's a good candidate
-        if (this.isGoodForAnalysis(element as HTMLElement)) {
-          this.addHoverListenersToElement(element as HTMLElement);
-        }
+    
+    if (analyzeBtn) {
+      analyzeBtn.addEventListener('click', () => this.analyzeSelectedBlocksFromToolbar());
+    }
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.hideBlockSelector();
+        chrome.runtime.sendMessage({ action: 'toolbarClosed' });
       });
-    });
-
-    // Also listen for dynamically added content
-    this.observeNewElements();
+    }
+    
+    // Adjust page content to account for toolbar
+    document.body.style.paddingTop = '60px';
   }
 
-  private isGoodForAnalysis(element: HTMLElement): boolean {
-    // Smart filtering for content boxes - entire information units
-    
-    const textLength = element.textContent?.trim().length || 0;
-    const tagName = element.tagName.toLowerCase();
-    const className = element.className.toLowerCase();
-    const id = element.id.toLowerCase();
-    
-    // Skip if element is too small
-    if (textLength < 30) {
-      return false;
+  private removeBlockSelectorToolbar(): void {
+    if (this.blockSelectorToolbar) {
+      this.blockSelectorToolbar.remove();
+      this.blockSelectorToolbar = null;
     }
-
-    // Skip if element is too large (likely a page container)
-    if (textLength > 5000) {
-      return false;
-    }
-
-    // Skip if element is inside navigation, menus, headers, footers
-    if (className.includes('nav') || className.includes('menu') || 
-        className.includes('header') || className.includes('footer') ||
-        className.includes('sidebar') || className.includes('widget') ||
-        className.includes('button') || className.includes('link') ||
-        id.includes('nav') || id.includes('menu') || 
-        id.includes('header') || id.includes('footer') ||
-        id.includes('button') || id.includes('link')) {
-      return false;
-    }
-
-    // Check if parent is a navigation or UI element
-    const parentElement = element.parentElement;
-    if (parentElement) {
-      const parentClass = parentElement.className.toLowerCase();
-      const parentId = parentElement.id.toLowerCase();
-      
-      if (parentClass.includes('nav') || parentClass.includes('menu') || 
-          parentClass.includes('header') || parentClass.includes('footer') ||
-          parentClass.includes('sidebar') || parentClass.includes('widget') ||
-          parentId.includes('nav') || parentId.includes('menu') || 
-          parentId.includes('header') || parentId.includes('footer')) {
-        return false;
-      }
-    }
-
-    // Special handling for different element types
-    if (tagName === 'li') {
-      // List items are good if they're not in navigation
-      const listParent = element.closest('ul, ol');
-      if (listParent) {
-        const listClass = listParent.className.toLowerCase();
-        const listId = listParent.id.toLowerCase();
-        
-        if (listClass.includes('nav') || listClass.includes('menu') ||
-            listId.includes('nav') || listId.includes('menu')) {
-          return false;
-        }
-      }
-      return true; // List items are good content boxes
-    }
-
-    if (tagName === 'ul' || tagName === 'ol') {
-      // Entire lists are good if they're not navigation and have meaningful content
-      if (className.includes('nav') || className.includes('menu') ||
-          id.includes('nav') || id.includes('menu')) {
-        return false;
-      }
-      
-      // Check if list has meaningful content (not just navigation links)
-      const listItems = element.querySelectorAll('li');
-      if (listItems.length < 2) {
-        return false; // Single item lists are usually not worth analyzing as a whole
-      }
-      
-      // Check if list items have substantial content
-      let hasSubstantialContent = false;
-      listItems.forEach(li => {
-        if (li.textContent?.trim().length > 30) {
-          hasSubstantialContent = true;
-        }
-      });
-      
-      return hasSubstantialContent;
-    }
-
-    if (tagName.match(/^h[1-6]$/)) {
-      // Headers are good if they have meaningful content
-      return textLength >= 10;
-    }
-
-    if (tagName === 'p') {
-      // Paragraphs are good if they have meaningful content
-      return textLength >= 50;
-    }
-
-    // For divs and other containers, check if they contain meaningful content
-    if (tagName === 'div' || tagName === 'article' || tagName === 'section') {
-      // Check if this is a content container (has class names suggesting content)
-      const isContentContainer = className.includes('heading') || 
-                                className.includes('section') || 
-                                className.includes('clause') || 
-                                className.includes('term') || 
-                                className.includes('policy') || 
-                                className.includes('content');
-      
-      if (isContentContainer) {
-        return true; // Content containers are good
-      }
-      
-      // For other divs, check if they have meaningful text content
-      // and not too many child elements (likely a content block, not a layout container)
-      const childElements = element.children.length;
-      if (childElements > 10) {
-        return false; // Too many children, likely a layout container
-      }
-      
-      // Check if it has meaningful text content
-      const hasTextContent = element.textContent?.trim().length > 0;
-      const hasContentElements = element.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li').length > 0;
-      
-      return hasTextContent && (hasContentElements || textLength >= 100);
-    }
-
-    return false;
-  }
-
-  private addHoverListenersToElement(element: HTMLElement): void {
-    // Skip if already has listeners, too small, or is nested inside another analyzed element
-    if (element.dataset.bananaHover || 
-        element.textContent?.trim().length < 50 ||
-        element.closest('[data-banana-hover="true"]')) {
-      return;
-    }
-
-    // Skip if element is inside a larger analyzed element
-    const parentWithHover = element.closest('[data-banana-hover="true"]');
-    if (parentWithHover) {
-      return;
-    }
-
-    element.dataset.bananaHover = 'true';
-    
-    element.addEventListener('mouseenter', (e) => {
-      this.handleElementHover(e.target as HTMLElement);
-    });
-
-    element.addEventListener('mouseleave', (e) => {
-      this.handleElementLeave(e.target as HTMLElement);
-    });
-
-    element.addEventListener('click', (e) => {
-      if (!this.hoverDetectionActive) {
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      this.analyzeHoveredElement(e.target as HTMLElement);
-    });
-  }
-
-  private observeNewElements(): void {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            const element = node as HTMLElement;
-            // Target content boxes - entire information units
-            const selectors = [
-              'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-              'li', // Individual list items
-              'ul', 'ol', // Entire lists
-              'div[class*="heading"]', // Heading containers
-              'div[class*="section"]', // Section containers
-              'div[class*="clause"]', // Clause containers
-              'div[class*="term"]', // Term containers
-              'div[class*="policy"]', // Policy containers
-              'div[class*="content"]', // Content containers
-              'article', 'section' // Semantic content blocks
-            ];
-
-            selectors.forEach(selector => {
-              if (element.matches(selector)) {
-                if (this.isGoodForAnalysis(element)) {
-                  this.addHoverListenersToElement(element);
-                }
-              }
-              // Also check children
-              element.querySelectorAll(selector).forEach(child => {
-                if (this.isGoodForAnalysis(child as HTMLElement)) {
-                  this.addHoverListenersToElement(child as HTMLElement);
-                }
-              });
-            });
-          }
-        });
-      });
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  private removeSelectionListeners(): void {
-    // Disable hover detection
-    this.hoverDetectionActive = false;
-    
-    // Remove hover overlays and effects
-    this.removeAllHoverOverlays();
-    this.removeAllHoverEffects();
     
     // Reset page padding
     document.body.style.paddingTop = '';
-    
-    console.log('🚫 Hover detection disabled');
   }
 
-  private handleElementHover(element: HTMLElement): void {
-    // Skip if hover detection is not active
-    if (!this.hoverDetectionActive) {
-      return;
-    }
-
-    // Skip if element is too small or already has hover effect
-    if (element.textContent?.trim().length < 50 || element.dataset.bananaHovering === 'true') {
-      return;
-    }
-
-    element.dataset.bananaHovering = 'true';
+  private identifySelectableBlocks(): void {
+    // Clear previous selectable elements
+    this.selectableElements = [];
     
-    // Add translucent border and background
-    element.style.border = '2px solid rgba(255, 138, 0, 0.6)';
-    element.style.backgroundColor = 'rgba(255, 138, 0, 0.1)';
-    element.style.borderRadius = '8px';
-    element.style.transition = 'all 0.2s ease';
-    element.style.cursor = 'pointer';
-    element.style.position = 'relative';
+    // Define selectors for content blocks that are likely to contain meaningful text
+    const selectors = [
+      'p', 'div', 'section', 'article', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'td', 'th', 'span', 'a', 'strong', 'em', 'b', 'i'
+    ];
     
-    // Add a subtle glow effect
-    element.style.boxShadow = '0 0 15px rgba(255, 138, 0, 0.3)';
-    
-    // Create the "Click to analyze" tooltip
-    this.createHoverTooltip(element);
-  }
-
-  private handleElementLeave(element: HTMLElement): void {
-    // Remove hover effects
-    element.style.border = '';
-    element.style.backgroundColor = '';
-    element.style.borderRadius = '';
-    element.style.boxShadow = '';
-    element.style.cursor = '';
-    element.dataset.bananaHovering = 'false';
-    
-    // Remove tooltip
-    const tooltip = element.querySelector('.banana-hover-tooltip');
-    if (tooltip) {
-      tooltip.remove();
-    }
-  }
-
-  private createHoverTooltip(element: HTMLElement): void {
-    const tooltip = document.createElement('div');
-    tooltip.className = 'banana-hover-tooltip';
-    tooltip.innerHTML = `
-      <span class="banana-tooltip-icon">🍌</span>
-      <span class="banana-tooltip-text">Click to analyze</span>
-    `;
-
-    // Style the tooltip
-    tooltip.style.cssText = `
-      position: absolute;
-      top: -35px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255, 138, 0, 0.95);
-      color: white;
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
-      z-index: 10000;
-      pointer-events: none;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      white-space: nowrap;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    `;
-
-    // Style the content
-    const icon = tooltip.querySelector('.banana-tooltip-icon') as HTMLElement;
-    icon.style.cssText = `
-      margin-right: 4px;
-      font-size: 12px;
-    `;
-
-    // Add to element
-    element.appendChild(tooltip);
-
-    // Animate in
-    requestAnimationFrame(() => {
-      tooltip.style.opacity = '1';
+    selectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((element: Element) => {
+        const htmlElement = element as HTMLElement;
+        const text = htmlElement.innerText?.trim() || '';
+        
+        // Only include elements with substantial text content
+        if (text.length > 20 && 
+            !this.isDescendantOfToolbar(htmlElement) &&
+            this.isVisible(htmlElement) &&
+            !this.hasSelectableParent(htmlElement)) {
+          this.selectableElements.push(htmlElement);
+          this.addBlockHover(htmlElement);
+        }
+      });
     });
+    
+    console.log(`🎯 Identified ${this.selectableElements.length} selectable blocks`);
   }
 
-  private removeAllHoverOverlays(): void {
-    const overlays = document.querySelectorAll('.banana-hover-overlay');
-    overlays.forEach(overlay => overlay.remove());
-  }
-
-  private analyzeHoveredElement(element: HTMLElement): void {
-    const text = element.textContent?.trim();
-    if (!text || text.length < 10) {
-      return;
+  private isDescendantOfToolbar(element: HTMLElement): boolean {
+    let parent = element.parentElement;
+    while (parent) {
+      if (parent.id === 'going-bananas-block-selector-toolbar' || 
+          parent.id?.startsWith('going-bananas-')) {
+        return true;
+      }
+      parent = parent.parentElement;
     }
-
-    // Exit selector mode immediately after clicking
-    this.exitSelectorMode();
-
-    // Store the text for analysis
-    this.selectedTextForAnalysis = text;
-    console.log('🎯 Analyzing hovered element:', text.substring(0, 100) + '...');
-
-    // Show loading indicator
-    this.showLoadingIndicator();
-
-    // Send analysis request directly
-    this.analyzeSelectedTextDirectly(text, element);
+    return false;
   }
 
-  private exitSelectorMode(): void {
-    // Disable hover detection
-    this.hoverDetectionActive = false;
-    
-    // Remove all hover effects and overlays
-    this.removeAllHoverOverlays();
-    this.removeAllHoverEffects();
-    
-    // Hide the toolbar
-    this.hideTextSelectionToolbar();
-    
-    // Notify popup that toolbar was closed
-    chrome.runtime.sendMessage({ action: 'toolbarClosed' });
-    
-    console.log('🚫 Exited selector mode after analysis');
+  private isVisible(element: HTMLElement): boolean {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && 
+           style.visibility !== 'hidden' && 
+           style.opacity !== '0' &&
+           element.offsetWidth > 0 && 
+           element.offsetHeight > 0;
   }
 
-  private removeAllHoverEffects(): void {
-    // Remove all hover effects from elements
-    const elements = document.querySelectorAll('[data-banana-hovering="true"]');
-    elements.forEach(element => {
-      const el = element as HTMLElement;
-      el.style.border = '';
-      el.style.backgroundColor = '';
-      el.style.borderRadius = '';
-      el.style.boxShadow = '';
-      el.style.cursor = '';
-      el.dataset.bananaHovering = 'false';
-      
-      // Remove tooltip
-      const tooltip = el.querySelector('.banana-hover-tooltip');
-      if (tooltip) {
-        tooltip.remove();
+  private hasSelectableParent(element: HTMLElement): boolean {
+    return this.selectableElements.some(parent => 
+      parent !== element && parent.contains(element)
+    );
+  }
+
+  private addBlockHover(element: HTMLElement): void {
+    const originalBorder = element.style.border;
+    const originalBackground = element.style.backgroundColor;
+    
+    const mouseEnterHandler = () => {
+      if (!this.isBlockSelected(element)) {
+        element.style.border = '2px dashed #ff8a00';
+        element.style.backgroundColor = 'rgba(255, 138, 0, 0.1)';
+        element.style.cursor = 'pointer';
+      }
+    };
+    
+    const mouseLeaveHandler = () => {
+      if (!this.isBlockSelected(element)) {
+        element.style.border = originalBorder;
+        element.style.backgroundColor = originalBackground;
+        element.style.cursor = 'default';
+      }
+    };
+    
+    element.addEventListener('mouseenter', mouseEnterHandler);
+    element.addEventListener('mouseleave', mouseLeaveHandler);
+    
+    // Store original styles and handlers for cleanup
+    (element as any).__blockSelectorData = {
+      originalBorder,
+      originalBackground,
+      mouseEnterHandler,
+      mouseLeaveHandler
+    };
+  }
+
+  private attachBlockSelectionListeners(): void {
+    // Create and store the bound handler
+    this.boundClickHandler = this.handleBlockClick.bind(this);
+    
+    this.selectableElements.forEach(element => {
+      if (this.boundClickHandler) {
+        element.addEventListener('click', this.boundClickHandler);
       }
     });
   }
 
-  private async analyzeSelectedTextDirectly(text: string, element: HTMLElement): Promise<void> {
-    try {
-      console.log('🚀 Starting direct analysis for text:', text.substring(0, 100) + '...');
+  private removeBlockSelectionListeners(): void {
+    this.selectableElements.forEach(element => {
+      // Remove the click listener using the stored bound handler
+      if (this.boundClickHandler) {
+        element.removeEventListener('click', this.boundClickHandler);
+      }
+      
+      // Clean up hover listeners and data
+      const data = (element as any).__blockSelectorData;
+      if (data) {
+        element.removeEventListener('mouseenter', data.mouseEnterHandler);
+        element.removeEventListener('mouseleave', data.mouseLeaveHandler);
+        delete (element as any).__blockSelectorData;
+      }
+    });
+    
+    // Clear the bound handler
+    this.boundClickHandler = null;
+    
+    // Clear the selectable elements array
+    this.selectableElements = [];
+  }
 
-      // Get current tab URL for context
-      const currentUrl = window.location.href;
+  private handleBlockClick(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const clickEvent = event as MouseEvent;
+    const element = event.target as HTMLElement;
+    const blockId = this.generateBlockId(element);
+    const currentBlockIndex = this.selectableElements.indexOf(element);
+    
+    if (clickEvent.shiftKey && this.lastSelectedBlockIndex !== -1 && currentBlockIndex !== -1) {
+      // Shift+click: Select range between last selected and current block
+      this.selectBlockRange(this.lastSelectedBlockIndex, currentBlockIndex);
+    } else {
+      // Normal click
+      if (this.isBlockSelected(element)) {
+        // Unselect the block
+        this.unselectBlock(element, blockId);
+        // Update last selected index to the previous selected block (if any)
+        this.updateLastSelectedBlockIndex();
+      } else {
+        // Select the block
+        this.selectBlock(element, blockId);
+        // Update last selected index
+        this.lastSelectedBlockIndex = currentBlockIndex;
+      }
+    }
+    
+    this.updateBlockCountDisplay();
+    this.notifyPopupOfSelection();
+  }
+
+  private generateBlockId(element: HTMLElement): string {
+    // Generate a unique ID for the block based on its position and content
+    const rect = element.getBoundingClientRect();
+    const text = (element.innerText || element.textContent || '').substring(0, 50);
+    return `block_${Math.round(rect.top)}_${Math.round(rect.left)}_${text.replace(/\s+/g, '_')}`;
+  }
+
+  private isBlockSelected(element: HTMLElement): boolean {
+    const blockId = this.generateBlockId(element);
+    return this.selectedBlocks.some(block => block.id === blockId);
+  }
+
+  private selectBlock(element: HTMLElement, blockId: string): void {
+    // Use textContent for more comprehensive text extraction, fallback to innerText
+    const text = (element.textContent?.trim() || element.innerText?.trim() || '');
+    const tagName = element.tagName.toLowerCase();
+    
+    // Only add blocks with meaningful text content
+    if (text.length < 10) {
+      console.log('🚫 Skipping block with insufficient text:', text.substring(0, 50));
+      return;
+    }
+    
+    // Store original styles for later restoration
+    const originalBorder = element.style.border || '';
+    const originalBackground = element.style.backgroundColor || '';
+    
+    this.selectedBlocks.push({
+      id: blockId,
+      text: text,
+      element: tagName,
+      domElement: element, // Store direct reference to DOM element
+      originalStyles: {
+        border: originalBorder,
+        backgroundColor: originalBackground
+      }
+    });
+    
+    // Highlight the selected block
+    element.style.border = '2px solid #e52e71';
+    element.style.backgroundColor = 'rgba(229, 46, 113, 0.2)';
+    element.style.cursor = 'pointer';
+    
+    console.log(`✅ Selected block: ${tagName} (${text.length} chars)`);
+  }
+
+  private selectBlockRange(startIndex: number, endIndex: number): void {
+    const minIndex = Math.min(startIndex, endIndex);
+    const maxIndex = Math.max(startIndex, endIndex);
+    
+    console.log(`🔗 Selecting range: blocks ${minIndex} to ${maxIndex} (${maxIndex - minIndex + 1} blocks)`);
+    
+    for (let i = minIndex; i <= maxIndex; i++) {
+      const element = this.selectableElements[i];
+      if (element && !this.isBlockSelected(element)) {
+        const blockId = this.generateBlockId(element);
+        this.selectBlock(element, blockId);
+      }
+    }
+    
+    // Update last selected to the clicked block
+    this.lastSelectedBlockIndex = endIndex;
+  }
+
+  private updateLastSelectedBlockIndex(): void {
+    // Find the last selected block index
+    if (this.selectedBlocks.length === 0) {
+      this.lastSelectedBlockIndex = -1;
+    } else {
+      // Get the last selected block's element and find its index
+      const lastBlock = this.selectedBlocks[this.selectedBlocks.length - 1];
+      this.lastSelectedBlockIndex = this.selectableElements.indexOf(lastBlock.domElement);
+    }
+  }
+
+  private unselectBlock(element: HTMLElement, blockId: string): void {
+    const selectedBlock = this.selectedBlocks.find(block => block.id === blockId);
+    
+    if (selectedBlock) {
+      // Restore original styles using stored values
+      element.style.border = selectedBlock.originalStyles.border;
+      element.style.backgroundColor = selectedBlock.originalStyles.backgroundColor;
+      element.style.cursor = '';
+    }
+    
+    // Remove from selected blocks array
+    this.selectedBlocks = this.selectedBlocks.filter(block => block.id !== blockId);
+    
+    console.log(`❌ Unselected block: ${blockId}`);
+  }
+
+  private clearSelectedBlocks(): void {
+    console.log(`🧹 Clearing ${this.selectedBlocks.length} selected blocks`);
+    
+    // Clear visual highlights using direct element references
+    this.selectedBlocks.forEach((block, index) => {
+      try {
+        const element = block.domElement;
+        if (element && element.parentNode) {
+          // Restore original styles
+          element.style.border = block.originalStyles.border;
+          element.style.backgroundColor = block.originalStyles.backgroundColor;
+          element.style.cursor = '';
+          console.log(`✅ Cleared block ${index + 1}: ${block.element}`);
+        } else {
+          console.log(`⚠️ Block ${index + 1} element no longer in DOM`);
+        }
+      } catch (error) {
+        console.log(`❌ Error clearing block ${index + 1}:`, error);
+      }
+    });
+    
+    this.selectedBlocks = [];
+    this.lastSelectedBlockIndex = -1; // Reset range selection tracking
+    this.updateBlockCountDisplay();
+    this.notifyPopupOfSelection();
+    
+    console.log('🧹 All selected blocks cleared');
+  }
+
+  private clearBlockHighlights(): void {
+    console.log(`🧹 Clearing hover effects from ${this.selectableElements.length} elements`);
+    
+    this.selectableElements.forEach((element, index) => {
+      try {
+        const data = (element as any).__blockSelectorData;
+        if (data) {
+          // Remove event listeners first
+          if (data.mouseEnterHandler) {
+            element.removeEventListener('mouseenter', data.mouseEnterHandler);
+          }
+          if (data.mouseLeaveHandler) {
+            element.removeEventListener('mouseleave', data.mouseLeaveHandler);
+          }
+          
+          // Force restore original styles (in case element is currently hovered)
+          element.style.border = data.originalBorder || '';
+          element.style.backgroundColor = data.originalBackground || '';
+          element.style.cursor = '';
+          
+          // Clean up the stored data
+          delete (element as any).__blockSelectorData;
+          
+          console.log(`✅ Cleared hover effect ${index + 1}`);
+        }
+      } catch (error) {
+        console.log(`❌ Error clearing hover effect ${index + 1}:`, error);
+      }
+    });
+    
+    // Clear the selectable elements array
+    this.selectableElements = [];
+    console.log('🧹 All hover effects cleared');
+  }
+
+  private aggressiveStyleCleanup(): void {
+    console.log('🧽 Performing aggressive style cleanup...');
+    
+    // Find any elements that might have our styling applied
+    const potentialElements = document.querySelectorAll('*');
+    let cleanedCount = 0;
+    
+    potentialElements.forEach((element: Element) => {
+      const htmlElement = element as HTMLElement;
+      const style = htmlElement.style;
       
-      // Get configurable API URL
-      const apiUrl = await getApiUrl();
-      console.log('🔗 Using API URL for direct analysis:', apiUrl);
+      // Look for elements with our specific styles
+      if (style.border && (
+          style.border.includes('2px solid #e52e71') ||     // Selection style
+          style.border.includes('2px dashed #ff8a00')       // Hover style
+        )) {
+        style.border = '';
+        cleanedCount++;
+      }
       
-      // Use the selected text analysis endpoint
-      const response = await fetch(`${apiUrl}/analyze/selected-text`, {
+      if (style.backgroundColor && (
+          style.backgroundColor.includes('rgba(229, 46, 113, 0.2)') ||  // Selection background
+          style.backgroundColor.includes('rgba(255, 138, 0, 0.1)')      // Hover background
+        )) {
+        style.backgroundColor = '';
+        cleanedCount++;
+      }
+      
+      // Clean up any remaining block selector data
+      if ((htmlElement as any).__blockSelectorData) {
+        delete (htmlElement as any).__blockSelectorData;
+        cleanedCount++;
+      }
+    });
+    
+    console.log(`🧽 Aggressive cleanup completed: ${cleanedCount} style fixes applied`);
+  }
+
+  private updateBlockCountDisplay(): void {
+    const countDisplay = document.getElementById('block-count-display');
+    const analyzeBtn = document.getElementById('analyze-blocks-btn') as HTMLButtonElement;
+    
+    if (countDisplay) {
+      const count = this.selectedBlocks.length;
+      const totalChars = this.selectedBlocks.reduce((sum, block) => sum + block.text.length, 0);
+      countDisplay.textContent = count === 0 
+        ? '0 blocks selected' 
+        : `${count} block${count === 1 ? '' : 's'} selected (${totalChars} chars)`;
+    }
+    
+    // Enable/disable analyze button based on selection
+    if (analyzeBtn) {
+      const hasSelection = this.selectedBlocks.length > 0;
+      analyzeBtn.style.opacity = hasSelection ? '1' : '0.5';
+      analyzeBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+      analyzeBtn.style.cursor = hasSelection ? 'pointer' : 'default';
+    }
+  }
+
+  private notifyPopupOfSelection(): void {
+    chrome.runtime.sendMessage({
+      action: 'blocksSelected',
+      blocks: this.selectedBlocks
+    });
+  }
+
+  private showBlockAnalysisResult(analysis: any, selectedBlocks: any[]): void {
+    console.log('📊 Displaying block analysis result:', analysis);
+    
+    // Use the existing showAnalysisNotification method but with block context
+    const enhancedAnalysis = {
+      ...analysis,
+      context: {
+        type: 'block_selection',
+        blocks_analyzed: selectedBlocks?.length || 0,
+        total_content_length: selectedBlocks?.reduce((sum, block) => sum + block.text.length, 0) || 0
+      }
+    };
+    
+    this.showAnalysisNotification(enhancedAnalysis);
+  }
+
+  // Extension Connection Check Methods
+  private startExtensionConnectionCheck(): void {
+    // Check every 2 seconds if extension is still connected
+    this.extensionCheckInterval = window.setInterval(() => {
+      this.checkExtensionConnection();
+    }, 2000);
+  }
+
+  private stopExtensionConnectionCheck(): void {
+    if (this.extensionCheckInterval) {
+      clearInterval(this.extensionCheckInterval);
+      this.extensionCheckInterval = null;
+    }
+  }
+
+  private checkExtensionConnection(): void {
+    if (!this.blockSelectorActive) {
+      this.stopExtensionConnectionCheck();
+      return;
+    }
+
+    try {
+      // Try to send a ping message to the extension
+      chrome.runtime.sendMessage({ action: 'ping' }, (response) => {
+        if (chrome.runtime.lastError || !response) {
+          console.log('🔌 Extension disconnected, cleaning up block selector');
+          this.hideBlockSelector();
+        }
+      });
+    } catch (error) {
+      console.log('🔌 Extension context invalidated, cleaning up block selector');
+      this.hideBlockSelector();
+    }
+  }
+
+  // Analyze selected blocks directly from toolbar
+  private async analyzeSelectedBlocksFromToolbar(): Promise<void> {
+    if (this.selectedBlocks.length === 0) {
+      this.showToolbarNotification('⚠️ Please select some content blocks first!', 'error');
+      return;
+    }
+
+    // Combine all selected block texts with better formatting
+    const combinedText = this.selectedBlocks
+      .map(block => block.text.trim())
+      .filter(text => text.length > 0)  // Remove empty texts
+      .join('\n\n');
+    
+    console.log(`📝 Combined text from ${this.selectedBlocks.length} blocks: ${combinedText.length} characters`);
+    console.log(`📄 First 200 chars: "${combinedText.substring(0, 200)}..."`);
+    
+    if (combinedText.length < 50) {
+      this.showToolbarNotification('⚠️ Selected content must be at least 50 characters for analysis', 'error');
+      return;
+    }
+
+    if (combinedText.length > 50000) {
+      this.showToolbarNotification('⚠️ Selected content is too long (max 50,000 chars)', 'error');
+      return;
+    }
+
+    try {
+      // Show loading state
+      this.setAnalyzeButtonLoading(true);
+      this.showToolbarNotification('🔍 Analyzing selected blocks...', 'info');
+      
+      console.log(`🎯 Analyzing ${this.selectedBlocks.length} selected blocks (${combinedText.length} chars)`);
+      
+      const response = await fetch('http://localhost:3000/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text,
-          url: currentUrl,
-          context: 'Selected text from terms and conditions document',
+          text: combinedText,
+          url: this.currentUrl,
           options: {
             language: 'en',
             detail_level: 'comprehensive',
-            focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms'],
-            include_recommendations: true,
-            risk_assessment: true
+            categories: ['privacy', 'liability', 'termination', 'payment'],
+            cache: true
           }
         }),
       });
@@ -1763,1495 +1888,85 @@ class TermsAnalyzer {
       }
 
       const result = await response.json();
-      console.log('✅ Direct analysis result:', result);
+      console.log('✅ Toolbar analysis result:', result);
       
       if (result.success && result.analysis) {
-        // Hide loading indicator
-        this.hideLoadingIndicator();
+        // Show success message
+        this.showToolbarNotification(`✅ Analysis complete! Risk: ${result.analysis.risk_level || 'unknown'}`, 'success');
         
-        // Show analysis widget directly
-        this.showAnalysisWidget(result.analysis, element, text);
+        // Display the analysis result
+        const enhancedAnalysis = {
+          ...result.analysis,
+          context: {
+            type: 'toolbar_block_selection',
+            blocks_analyzed: this.selectedBlocks.length,
+            total_content_length: combinedText.length,
+            selection_method: 'toolbar'
+          }
+        };
+        
+        console.log('🎯 Showing analysis popup with results');
+        this.showAnalysisNotification(enhancedAnalysis);
+        
+        // Auto-expand the notification for toolbar analyses since it's a deliberate user action
+        setTimeout(() => {
+          const notification = document.getElementById('going-bananas-result');
+          if (notification) {
+            console.log('📖 Auto-expanding analysis details');
+            notification.click(); // This will expand the notification
+          }
+        }, 500);
+        
+        // Note: Block selection cleanup is now handled when popup is closed
+        
       } else {
         throw new Error(result.error || 'Analysis failed - no analysis data returned');
       }
       
     } catch (error) {
-      console.error('❌ Error in direct analysis:', error);
-      this.hideLoadingIndicator();
+      console.error('❌ Toolbar analysis error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      this.showToolbarNotification(`❌ Analysis failed: ${errorMessage}`, 'error');
+    } finally {
+      this.setAnalyzeButtonLoading(false);
+    }
+  }
+
+  private showToolbarNotification(message: string, type: 'success' | 'error' | 'info'): void {
+    const countDisplay = document.getElementById('block-count-display');
+    if (countDisplay) {
+      const originalText = countDisplay.textContent;
+      const originalBg = countDisplay.style.background;
       
-      // Show error message
-      this.showErrorMessage(element, error instanceof Error ? error.message : 'Analysis failed');
-    }
-  }
-
-  private showAnalysisWidget(analysis: any, element: HTMLElement, text: string): void {
-    console.log('🎨 Creating analysis widget with data:', analysis);
-    
-    // Remove any existing analysis widgets
-    this.removeExistingAnalysisWidgets();
-    
-    // Create the analysis widget
-    const widget = document.createElement('div');
-    widget.id = 'going-bananas-analysis-widget';
-    widget.className = 'banana-analysis-widget';
-    
-    // Style the widget
-    widget.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-      z-index: 10001;
-      max-width: 500px;
-      max-height: 80vh;
-      overflow-y: auto;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      border: 2px solid #ff8a00;
-    `;
-
-    // Create widget content
-    widget.innerHTML = `
-      <div style="padding: 20px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #eee; padding-bottom: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 20px;">🍌</span>
-            <h3 style="margin: 0; color: #333; font-size: 18px; font-weight: 600;">Analysis Result</h3>
-          </div>
-          <button id="close-analysis-widget" style="
-            background: #f5f5f5;
-            border: none;
-            border-radius: 6px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 14px;
-            color: #666;
-          ">✕</button>
-        </div>
-        
-        <div style="margin-bottom: 16px;">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="
-              background: ${this.getRiskColor(analysis.risk_level)};
-              color: white;
-              padding: 8px 12px;
-              border-radius: 8px;
-              font-weight: 600;
-              font-size: 14px;
-            ">
-              ${analysis.risk_level.toUpperCase()} RISK
-            </div>
-            <div style="
-              background: #f8f9fa;
-              padding: 8px 12px;
-              border-radius: 8px;
-              font-weight: 600;
-              font-size: 16px;
-              color: #333;
-            ">
-              Score: ${analysis.risk_score}
-            </div>
-          </div>
-          
-          <p style="margin: 0; color: #555; line-height: 1.5; font-size: 14px;">
-            ${analysis.summary}
-          </p>
-        </div>
-        
-        <div style="margin-bottom: 16px;">
-          <h4 style="margin: 0 0 8px 0; color: #333; font-size: 16px; font-weight: 600;">Key Points:</h4>
-          <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 14px; line-height: 1.5;">
-            ${analysis.key_points.map((point: string) => `<li>${point}</li>`).join('')}
-          </ul>
-        </div>
-        
-        ${analysis.recommendations && analysis.recommendations.length > 0 ? `
-        <div style="margin-bottom: 16px;">
-          <h4 style="margin: 0 0 8px 0; color: #333; font-size: 16px; font-weight: 600;">Recommendations:</h4>
-          <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 14px; line-height: 1.5;">
-            ${analysis.recommendations.map((rec: string) => `<li>${rec}</li>`).join('')}
-          </ul>
-        </div>
-        ` : ''}
-        
-        <div style="
-          background: #f8f9fa;
-          padding: 12px;
-          border-radius: 8px;
-          border-left: 4px solid #ff8a00;
-          margin-top: 16px;
-        ">
-          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Analyzed Text:</div>
-          <div style="font-size: 13px; color: #333; line-height: 1.4; max-height: 100px; overflow-y: auto;">
-            "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Add to document
-    document.body.appendChild(widget);
-
-    // Add close button functionality
-    const closeBtn = widget.querySelector('#close-analysis-widget');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        widget.remove();
-      });
-    }
-
-    // Add backdrop
-    const backdrop = document.createElement('div');
-    backdrop.id = 'going-bananas-analysis-backdrop';
-    backdrop.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 10000;
-    `;
-    
-    backdrop.addEventListener('click', () => {
-      widget.remove();
-      backdrop.remove();
-    });
-
-    document.body.appendChild(backdrop);
-    document.body.appendChild(widget);
-
-    console.log('✅ Analysis widget displayed');
-  }
-
-  private getRiskColor(riskLevel: string): string {
-    switch (riskLevel.toLowerCase()) {
-      case 'low': return '#10b981';
-      case 'medium': return '#f59e0b';
-      case 'high': return '#ef4444';
-      default: return '#6b7280';
-    }
-  }
-
-  private removeExistingAnalysisWidgets(): void {
-    const existingWidget = document.getElementById('going-bananas-analysis-widget');
-    const existingBackdrop = document.getElementById('going-bananas-analysis-backdrop');
-    
-    if (existingWidget) existingWidget.remove();
-    if (existingBackdrop) existingBackdrop.remove();
-  }
-
-  private showErrorMessage(element: HTMLElement, message: string): void {
-    console.log('❌ Showing error message:', message);
-    
-    // Create error notification
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'banana-error-message';
-    errorDiv.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #ef4444;
-      color: white;
-      padding: 12px 16px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      z-index: 10001;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      max-width: 300px;
-    `;
-    
-    errorDiv.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span>⚠️</span>
-        <span>${message}</span>
-      </div>
-    `;
-    
-    document.body.appendChild(errorDiv);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-      if (errorDiv.parentNode) {
-        errorDiv.remove();
-      }
-    }, 5000);
-  }
-
-  private showLoadingIndicator(): void {
-    // Remove any existing loading indicators
-    this.hideLoadingIndicator();
-    
-    // Create loading indicator
-    const loadingDiv = document.createElement('div');
-    loadingDiv.id = 'going-bananas-loading-indicator';
-    loadingDiv.style.cssText = `
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255, 138, 0, 0.95);
-      color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      z-index: 10001;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    `;
-    
-    loadingDiv.innerHTML = `
-      <div style="
-        width: 16px;
-        height: 16px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-top: 2px solid white;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      "></div>
-      <span>Analyzing text...</span>
-    `;
-    
-    // Add CSS animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(style);
-    
-    document.body.appendChild(loadingDiv);
-    console.log('⏳ Loading indicator shown');
-  }
-
-  private hideLoadingIndicator(): void {
-    const loadingDiv = document.getElementById('going-bananas-loading-indicator');
-    if (loadingDiv) {
-      loadingDiv.remove();
-      console.log('✅ Loading indicator hidden');
-    }
-  }
-
-  // Legacy text selection handler - hover-based analysis is now primary
-  private handleTextSelection(): void {
-    const selectedText = this.getSelectedText();
-    const infoElement = document.getElementById('selected-text-info');
-    
-    console.log('🔍 Legacy text selection handler called:', { selectedText: selectedText?.substring(0, 50), length: selectedText?.length });
-    
-    // Check if selection is from extension popup or other extension elements
-    if (this.isSelectionFromExtensionElement()) {
-      console.log('🚫 Selection is from extension element, ignoring');
-      return;
-    }
-    
-    if (infoElement && selectedText && selectedText.length > 0) {
-      console.log('✅ Text selected via legacy method, updating UI');
+      // Show notification
+      countDisplay.textContent = message;
+      countDisplay.style.background = type === 'success' ? 'rgba(34, 197, 94, 0.9)' :
+                                     type === 'error' ? 'rgba(239, 68, 68, 0.9)' :
+                                     'rgba(59, 130, 246, 0.9)';
       
-      // Update UI to show selected text
-      infoElement.textContent = `${selectedText.length} characters selected`;
-      infoElement.style.background = 'rgba(255,255,255,0.4)';
-      infoElement.style.border = '2px solid rgba(255,255,255,0.6)';
-      infoElement.style.transform = 'scale(1.05)';
-      infoElement.style.transition = 'all 0.3s ease';
-      
-      // Send selected text to popup
-      chrome.runtime.sendMessage({ 
-        action: 'textSelected', 
-        text: selectedText 
-      });
-
-      // Store the selected text for analysis
-      this.selectedTextForAnalysis = selectedText;
-    } else if (infoElement) {
-      // Reset UI when no text selected
-      infoElement.textContent = 'Hover over text to analyze';
-      infoElement.style.background = 'rgba(255,255,255,0.2)';
-      infoElement.style.border = 'none';
-      infoElement.style.transform = 'scale(1)';
-      
-      this.selectedTextForAnalysis = '';
+      // Restore original after 3 seconds
+      setTimeout(() => {
+        if (countDisplay.textContent === message) {
+          countDisplay.textContent = originalText;
+          countDisplay.style.background = originalBg;
+        }
+      }, 3000);
     }
   }
 
-  private getSelectedText(): string {
-    const selection = window.getSelection();
-    return selection ? selection.toString().trim() : '';
-  }
-
-  private isSelectionFromExtensionElement(): boolean {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      return false;
-    }
-
-    const range = selection.getRangeAt(0);
-    const container = range.commonAncestorContainer;
-    
-    // Check if the selection is within any extension-related elements
-    const extensionSelectors = [
-      'going-bananas-toolbar',
-      'going-bananas-contextual-analyze',
-      'going-bananas-analysis-widget',
-      'going-bananas-popup',
-      'going-bananas-overlay',
-      '[data-extension="going-bananas"]',
-      '.going-bananas-extension'
-    ];
-
-    // Check if the container or any parent element matches extension selectors
-    let element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
-    
-    while (element) {
-      // Check if element has extension-related ID or class
-      if (element.id && extensionSelectors.some(selector => element.id.includes('going-bananas'))) {
-        return true;
-      }
-      
-      // Check if element has extension-related classes
-      if (element.className && typeof element.className === 'string' && 
-          element.className.includes('going-bananas')) {
-        return true;
-      }
-      
-      // Check if element has extension data attribute
-      if (element.hasAttribute && element.hasAttribute('data-extension')) {
-        return true;
-      }
-      
-      element = element.parentElement;
-    }
-
-    return false;
-  }
-
-  // Contextual Analyze Button Methods
-  private showContextualAnalyzeButton(selectedText: string): void {
-    console.log('🎯 showContextualAnalyzeButton called with text:', selectedText.substring(0, 50));
-    
-    // Don't show button if text is too short
-    if (selectedText.length < 10) {
-      console.log('🚫 Text too short for analysis, not showing button');
-      return;
-    }
-    
-    // Remove any existing contextual button
-    this.removeContextualAnalyzeButton();
-    
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      console.log('❌ No selection or range found');
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    console.log('📍 Selection rect:', rect);
-    
-    // Calculate button position with improved positioning logic
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const buttonWidth = 220; // Slightly larger button
-    const buttonHeight = 48; // Slightly taller button
-    const padding = 12; // Padding from edges
-    
-    // Calculate optimal position
-    let top = rect.bottom + padding;
-    let left = rect.left + (rect.width / 2) - (buttonWidth / 2); // Center horizontally on selection
-    
-    // Adjust if button would go off-screen horizontally
-    if (left < padding) {
-      left = padding;
-    } else if (left + buttonWidth > viewportWidth - padding) {
-      left = viewportWidth - buttonWidth - padding;
-    }
-    
-    // Adjust if button would go off-screen vertically
-    if (top + buttonHeight > viewportHeight - padding) {
-      // Try positioning above the selection
-      top = rect.top - buttonHeight - padding;
-      
-      // If still off-screen, position at the top of the viewport
-      if (top < padding) {
-        top = padding;
-      }
-    }
-    
-    // Ensure minimum top position
-    if (top < padding) {
-      top = padding;
-    }
-    
-    // Fallback: if selection rect is invalid, position near cursor
-    if (rect.width === 0 && rect.height === 0) {
-      console.log('⚠️ Invalid selection rect, positioning near cursor');
-      top = Math.max(padding, viewportHeight / 2 - buttonHeight / 2);
-      left = Math.max(padding, viewportWidth / 2 - buttonWidth / 2);
-    }
-    
-    console.log('📍 Calculated button position:', { top, left, viewportWidth, viewportHeight, selectionRect: rect });
-    
-    // Create the contextual analyze button with improved styling
-    const analyzeButton = document.createElement('div');
-    analyzeButton.id = 'going-bananas-contextual-analyze';
-    analyzeButton.style.cssText = `
-      position: fixed;
-      top: ${top}px;
-      left: ${left}px;
-      background: linear-gradient(135deg, #ff8a00, #e52e71);
-      color: white;
-      padding: 12px 20px;
-      border-radius: 24px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      box-shadow: 0 8px 24px rgba(255, 138, 0, 0.5);
-      border: 3px solid rgba(255, 255, 255, 0.2);
-      z-index: 999999;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transition: all 0.3s ease;
-      animation: going-bananas-button-appear 0.4s ease-out;
-      min-width: 200px;
-      max-width: 280px;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    `;
-    
-    analyzeButton.innerHTML = `
-      <span style="font-size: 18px; animation: going-bananas-bounce 2s ease-in-out infinite;">🍌</span>
-      <span>Analyze This Text</span>
-      <span style="font-size: 12px; opacity: 0.8;">→</span>
-    `;
-
-    // Add enhanced hover effects
-    analyzeButton.addEventListener('mouseenter', () => {
-      analyzeButton.style.transform = 'scale(1.08) translateY(-2px)';
-      analyzeButton.style.boxShadow = '0 12px 32px rgba(255, 138, 0, 0.7)';
-      analyzeButton.style.borderColor = 'rgba(255, 255, 255, 0.4)';
-    });
-
-    analyzeButton.addEventListener('mouseleave', () => {
-      analyzeButton.style.transform = 'scale(1) translateY(0)';
-      analyzeButton.style.boxShadow = '0 8px 24px rgba(255, 138, 0, 0.5)';
-      analyzeButton.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-    });
-
-    // Add click handler
-    analyzeButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.analyzeSelectedTextInSitu(selectedText);
-    });
-
-    document.body.appendChild(analyzeButton);
-    console.log('✅ Contextual analyze button added to DOM');
-    
-    // Verify the button is actually visible
-    setTimeout(() => {
-      const button = document.getElementById('going-bananas-contextual-analyze');
-      if (button) {
-        const buttonRect = button.getBoundingClientRect();
-        console.log('🔍 Button actual position:', buttonRect);
-        console.log('🔍 Button computed styles:', {
-          display: getComputedStyle(button).display,
-          visibility: getComputedStyle(button).visibility,
-          opacity: getComputedStyle(button).opacity,
-          zIndex: getComputedStyle(button).zIndex
-        });
+  private setAnalyzeButtonLoading(loading: boolean): void {
+    const analyzeBtn = document.getElementById('analyze-blocks-btn') as HTMLButtonElement;
+    if (analyzeBtn) {
+      if (loading) {
+        analyzeBtn.textContent = '⏳ Analyzing...';
+        analyzeBtn.style.opacity = '0.7';
+        analyzeBtn.style.pointerEvents = 'none';
       } else {
-        console.log('❌ Button not found in DOM after creation');
-      }
-    }, 100);
-
-    // Add the button animation styles
-    this.addContextualButtonAnimation();
-
-    // Auto-hide after configured timeout if not clicked
-    setTimeout(() => {
-      if (document.getElementById('going-bananas-contextual-analyze')) {
-        console.log(`⏰ Auto-hiding contextual button after ${TermsAnalyzer.AUTO_HIDE_TIMEOUT_MS / 1000} seconds`);
-        this.removeContextualAnalyzeButton();
-      }
-    }, TermsAnalyzer.AUTO_HIDE_TIMEOUT_MS);
-  }
-
-  private removeContextualAnalyzeButton(): void {
-    const existingButton = document.getElementById('going-bananas-contextual-analyze');
-    if (existingButton) {
-      console.log('🗑️ Removing existing contextual button');
-      existingButton.remove();
-    } else {
-      console.log('ℹ️ No existing contextual button to remove');
-    }
-  }
-
-  private addContextualButtonAnimation(): void {
-    if (document.getElementById('going-bananas-contextual-button-styles')) return;
-
-    const style = document.createElement('style');
-    style.id = 'going-bananas-contextual-button-styles';
-    style.textContent = `
-      @keyframes going-bananas-button-appear {
-        from {
-          opacity: 0;
-          transform: translateY(-20px) scale(0.8);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0) scale(1);
-        }
-      }
-      
-      @keyframes going-bananas-bounce {
-        0%, 20%, 50%, 80%, 100% {
-          transform: translateY(0);
-        }
-        40% {
-          transform: translateY(-3px);
-        }
-        60% {
-          transform: translateY(-1px);
-        }
-      }
-      
-      @keyframes going-bananas-pulse {
-        0% {
-          transform: scale(1);
-          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
-        }
-        50% {
-          transform: scale(1.05);
-          box-shadow: 0 8px 28px rgba(255, 138, 0, 0.6);
-        }
-        100% {
-          transform: scale(1);
-          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
-        }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  private async analyzeSelectedTextInSitu(selectedText: string): Promise<void> {
-    console.log('🚀 Starting in-situ analysis for text:', selectedText.substring(0, 50) + '...');
-    
-    // Clear the selection now that the button has been clicked
-    const selection = window.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
-    }
-    
-    // Remove the contextual button
-    this.removeContextualAnalyzeButton();
-    
-    // Store the selected text for analysis (non-invasive approach)
-    this.highlightSelectedTextImproved(selectedText);
-    console.log('✅ Text stored for analysis');
-    
-    // Show loading indicator with better positioning
-    this.showAnalysisLoadingIndicator();
-    console.log('⏳ Loading indicator shown');
-    
-    try {
-      console.log('📡 Sending request to backend...');
-      
-      // Validate selected text length before sending
-      if (selectedText.length < 10) {
-        throw new Error(`Selected text is too short (${selectedText.length} characters). Please select at least 10 characters for analysis.`);
-      }
-      
-      if (selectedText.length > 5000) {
-        throw new Error(`Selected text is too long (${selectedText.length} characters). Please select text with 5000 characters or less.`);
-      }
-      
-      // Get current tab URL for context
-      const currentUrl = window.location.href;
-      
-      // Try the new selected text analysis endpoint first
-      const apiUrl = await getApiUrl();
-      console.log('🔗 Using API URL for selected text analysis:', apiUrl);
-      
-      let response;
-      try {
-        console.log('📤 Trying selected text analysis endpoint...');
-        response = await fetch(`${apiUrl}/analyze/selected-text`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: selectedText,
-            url: currentUrl,
-            context: 'Selected text from terms and conditions document',
-            options: {
-              language: 'en',
-              detail_level: 'comprehensive',
-              focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms'],
-              include_recommendations: true,
-              risk_assessment: true
-            }
-          }),
-        });
-        console.log('✅ Selected text endpoint response status:', response.status);
-      } catch (fetchError) {
-        console.log('⚠️ Selected text endpoint failed, trying main analysis endpoint:', fetchError.message);
-        // Fallback to main analysis endpoint
-        response = await fetch(`${apiUrl}/analyze`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: selectedText,
-            url: currentUrl,
-            options: {
-              language: 'en',
-              detail_level: 'standard',
-              cache: false,
-              categories: ['privacy', 'liability', 'termination', 'payment'],
-              multiPass: false,
-              streaming: false,
-              contextAware: false
-            }
-          }),
-        });
-        console.log('✅ Main analysis endpoint response status:', response.status);
-      }
-
-      console.log('📡 Response status:', response.status);
-
-      if (!response.ok) {
-        throw new Error(`Analysis failed with status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('✅ Analysis completed:', {
-        success: result.success,
-        hasAnalysis: !!result.analysis,
-        mock: result.analysis?.mock,
-        riskScore: result.analysis?.risk_score,
-        analysisType: result.analysis?.analysis_type
-      });
-      
-      // Hide loading indicator
-      this.hideAnalysisLoadingIndicator();
-      console.log('✅ Loading indicator hidden');
-      
-      // Show the analysis results in situ
-      console.log('🎨 Showing analysis widget...');
-      if (result.analysis?.mock) {
-        console.log('⚠️ Using mock analysis data for selected text');
-      } else {
-        console.log('🎉 Using real Gemini analysis data for selected text');
-      }
-      this.showInSituAnalysisResults(result.analysis || result, selectedText);
-      console.log('✅ Analysis widget should now be visible');
-      
-    } catch (error) {
-      console.error('❌ Error analyzing selected text:', error);
-      this.hideAnalysisLoadingIndicator();
-      
-      // Show a more user-friendly error message based on error type
-      let friendlyError;
-      
-      if (error instanceof Error) {
-        if (error.message.includes('too short')) {
-          friendlyError = {
-            message: 'Text Too Short',
-            details: error.message
-          };
-        } else if (error.message.includes('too long')) {
-          friendlyError = {
-            message: 'Text Too Long', 
-            details: error.message
-          };
-        } else if (error.message.includes('400')) {
-          friendlyError = {
-            message: 'Invalid Request',
-            details: 'The selected text could not be processed. Please try selecting different text or check that the text is valid.'
-          };
-        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          friendlyError = {
-            message: 'Connection Error',
-            details: 'Unable to connect to the analysis service. Please check your internet connection and try again.'
-          };
-        } else {
-          friendlyError = {
-            message: 'Analysis Failed',
-            details: error.message
-          };
-        }
-      } else {
-        friendlyError = {
-          message: 'Analysis Failed',
-          details: 'Unable to analyze the selected text. Please try again or check your connection.'
-        };
-      }
-      
-      this.showAnalysisError(friendlyError);
-    }
-  }
-
-  // Selected Text Analysis Methods
-  private showSelectedTextAnalysis(analysis: any, selectedText: string): void {
-    console.log('📊 Displaying selected text analysis:', analysis);
-    
-    // First, highlight the selected text with a pulsating effect
-    this.highlightSelectedText(selectedText);
-    
-    // Then show the analysis results
-    this.displaySelectedTextAnalysisResults(analysis, selectedText);
-  }
-
-  private highlightSelectedTextImproved(selectedText: string): void {
-    // Non-invasive approach: Just store the selection info without modifying DOM
-    console.log('✅ Selected text stored for analysis:', selectedText.substring(0, 50) + '...');
-    
-    // Store the selection info for the analysis widget
-    this.selectedTextForAnalysis = selectedText;
-    
-    // Add the CSS animation styles if not already present
-    this.addHighlightAnimation();
-  }
-
-  private highlightSelectedTextBySearch(selectedText: string): void {
-    // Find and highlight the selected text with improved visibility
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    const textNodes: Text[] = [];
-    let node;
-    
-    while ((node = walker.nextNode())) {
-      if (node.textContent && node.textContent.includes(selectedText)) {
-        textNodes.push(node as Text);
+        analyzeBtn.textContent = '🔍 Analyze';
+        analyzeBtn.style.opacity = this.selectedBlocks.length > 0 ? '1' : '0.5';
+        analyzeBtn.style.pointerEvents = this.selectedBlocks.length > 0 ? 'auto' : 'none';
       }
     }
-
-    textNodes.forEach(textNode => {
-      const parent = textNode.parentNode;
-      if (!parent) return;
-
-      const text = textNode.textContent || '';
-      const index = text.indexOf(selectedText);
-      
-      if (index !== -1) {
-        // Split the text node
-        const beforeText = text.substring(0, index);
-        const afterText = text.substring(index + selectedText.length);
-        
-        // Create the highlighted span with improved visibility
-        const highlightSpan = document.createElement('span');
-        highlightSpan.className = 'going-bananas-highlight';
-        highlightSpan.textContent = selectedText;
-        highlightSpan.style.cssText = `
-          background: linear-gradient(135deg, #ff8a00, #e52e71);
-          color: white;
-          padding: 6px 12px;
-          border-radius: 8px;
-          animation: going-bananas-pulse 2s ease-in-out infinite;
-          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.6);
-          font-weight: 700;
-          position: relative;
-          z-index: 1000;
-          border: 3px solid rgba(255, 255, 255, 0.4);
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-          display: inline-block;
-          margin: 3px 0;
-          transform: scale(1.02);
-          transition: all 0.3s ease;
-          backdrop-filter: blur(2px);
-          -webkit-backdrop-filter: blur(2px);
-        `;
-
-        // Replace the text node with the new structure
-        if (beforeText) {
-          parent.insertBefore(document.createTextNode(beforeText), textNode);
-        }
-        parent.insertBefore(highlightSpan, textNode);
-        if (afterText) {
-          parent.insertBefore(document.createTextNode(afterText), textNode);
-        }
-        parent.removeChild(textNode);
-      }
-    });
-  }
-
-  private highlightSelectedText(selectedText: string): void {
-    // Use the improved version
-    this.highlightSelectedTextImproved(selectedText);
-  }
-
-  private addHighlightAnimation(): void {
-    if (document.getElementById('going-bananas-highlight-styles')) return;
-
-    const style = document.createElement('style');
-    style.id = 'going-bananas-highlight-styles';
-    style.textContent = `
-      @keyframes going-bananas-pulse {
-        0% {
-          transform: scale(1.02);
-          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
-        }
-        50% {
-          transform: scale(1.05);
-          box-shadow: 0 8px 28px rgba(255, 138, 0, 0.6);
-        }
-        100% {
-          transform: scale(1.02);
-          box-shadow: 0 6px 20px rgba(255, 138, 0, 0.4);
-        }
-      }
-      
-      .going-bananas-highlight {
-        transition: all 0.3s ease;
-        cursor: pointer;
-      }
-      
-      .going-bananas-highlight:hover {
-        transform: scale(1.08) !important;
-        box-shadow: 0 10px 32px rgba(255, 138, 0, 0.7) !important;
-        border-color: rgba(255, 255, 255, 0.6) !important;
-      }
-      
-      .going-bananas-highlight::before {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: linear-gradient(135deg, #ff8a00, #e52e71);
-        border-radius: 10px;
-        z-index: -1;
-        opacity: 0.3;
-        animation: going-bananas-pulse 2s ease-in-out infinite;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  private removeExistingHighlights(): void {
-    const highlights = document.querySelectorAll('.going-bananas-highlight');
-    highlights.forEach(highlight => {
-      const parent = highlight.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(highlight.textContent || ''), highlight);
-        parent.normalize(); // Merge adjacent text nodes
-      }
-    });
-  }
-
-  private addTemporarySelectionHighlight(): void {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-
-    // Remove any existing temporary highlight
-    this.removeTemporarySelectionHighlight();
-
-    const range = selection.getRangeAt(0);
-    const tempHighlight = document.createElement('span');
-    tempHighlight.id = 'going-bananas-temp-highlight';
-    tempHighlight.style.cssText = `
-      background: rgba(255, 138, 0, 0.3);
-      border-radius: 4px;
-      padding: 2px 4px;
-      transition: all 0.2s ease;
-      animation: going-bananas-temp-pulse 1s ease-in-out;
-    `;
-
-    try {
-      const contents = range.extractContents();
-      tempHighlight.appendChild(contents);
-      range.insertNode(tempHighlight);
-    } catch (error) {
-      console.log('Could not add temporary highlight:', error);
-    }
-
-    // Add the temporary pulse animation
-    this.addTemporaryHighlightAnimation();
-  }
-
-  private removeTemporarySelectionHighlight(): void {
-    const tempHighlight = document.getElementById('going-bananas-temp-highlight');
-    if (tempHighlight) {
-      const parent = tempHighlight.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(tempHighlight.textContent || ''), tempHighlight);
-        parent.normalize();
-      }
-    }
-  }
-
-  private addTemporaryHighlightAnimation(): void {
-    if (document.getElementById('going-bananas-temp-highlight-styles')) return;
-
-    const style = document.createElement('style');
-    style.id = 'going-bananas-temp-highlight-styles';
-    style.textContent = `
-      @keyframes going-bananas-temp-pulse {
-        0% {
-          background: rgba(255, 138, 0, 0.1);
-          transform: scale(1);
-        }
-        50% {
-          background: rgba(255, 138, 0, 0.4);
-          transform: scale(1.02);
-        }
-        100% {
-          background: rgba(255, 138, 0, 0.3);
-          transform: scale(1);
-        }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  private displaySelectedTextAnalysisResults(analysis: any, selectedText: string): void {
-    // Remove any existing analysis display
-    this.removeExistingAnalysisDisplay();
-    
-    // Create the analysis results panel
-    const analysisPanel = document.createElement('div');
-    analysisPanel.id = 'going-bananas-analysis-panel';
-    analysisPanel.style.cssText = `
-      position: fixed;
-      top: 60px;
-      right: 20px;
-      width: 400px;
-      max-height: 80vh;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-      border: 2px solid #ff8a00;
-      z-index: 999998;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      overflow: hidden;
-      animation: going-bananas-slide-in 0.3s ease-out;
-    `;
-
-    // Add slide-in animation
-    this.addAnalysisPanelAnimation();
-
-    const riskColor = this.getRiskColor(analysis.risk_level);
-    const riskIcon = this.getRiskIcon(analysis.risk_level);
-
-    analysisPanel.innerHTML = `
-      <div style="
-        background: linear-gradient(135deg, ${riskColor}, ${riskColor}dd);
-        color: white;
-        padding: 16px;
-        position: relative;
-      ">
-        <button id="close-analysis-btn" style="
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          background: rgba(255,255,255,0.2);
-          border: none;
-          color: white;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          cursor: pointer;
-          font-size: 14px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        ">×</button>
-        
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-          <span style="font-size: 24px;">${riskIcon}</span>
-          <div>
-            <h3 style="margin: 0; font-size: 18px; font-weight: 600;">Selected Text Analysis</h3>
-            <p style="margin: 0; font-size: 12px; opacity: 0.9;">${analysis.clause_type || 'general'} clause</p>
-          </div>
-        </div>
-        
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <div style="text-align: center;">
-            <div style="font-size: 28px; font-weight: bold;">${analysis.risk_score?.toFixed(1) || 'N/A'}</div>
-            <div style="font-size: 12px; opacity: 0.9;">Risk Score</div>
-          </div>
-          <div style="flex: 1;">
-            <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">${analysis.risk_level?.toUpperCase() || 'UNKNOWN'} RISK</div>
-            <div style="font-size: 12px; opacity: 0.9;">${analysis.user_impact || 'moderate'} impact</div>
-          </div>
-        </div>
-      </div>
-      
-      <div style="padding: 16px; max-height: 60vh; overflow-y: auto;">
-        <div style="margin-bottom: 16px;">
-          <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Summary</h4>
-          <p style="margin: 0; font-size: 13px; line-height: 1.4; color: #666;">${analysis.summary || 'No summary available'}</p>
-        </div>
-        
-        ${analysis.key_points && analysis.key_points.length > 0 ? `
-          <div style="margin-bottom: 16px;">
-            <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Key Points</h4>
-            <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.4; color: #666;">
-              ${analysis.key_points.slice(0, 3).map((point: string) => `<li>${point}</li>`).join('')}
-            </ul>
-          </div>
-        ` : ''}
-        
-        ${analysis.legal_implications && analysis.legal_implications.length > 0 ? `
-          <div style="margin-bottom: 16px;">
-            <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Legal Implications</h4>
-            <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.4; color: #666;">
-              ${analysis.legal_implications.slice(0, 3).map((implication: string) => `<li>${implication}</li>`).join('')}
-            </ul>
-          </div>
-        ` : ''}
-        
-        ${analysis.recommendations && analysis.recommendations.length > 0 ? `
-          <div style="margin-bottom: 16px;">
-            <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #333;">Recommendations</h4>
-            <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.4; color: #666;">
-              ${analysis.recommendations.slice(0, 3).map((rec: string) => `<li>${rec}</li>`).join('')}
-            </ul>
-          </div>
-        ` : ''}
-        
-        <div style="
-          background: #f8f9fa;
-          padding: 12px;
-          border-radius: 8px;
-          border-left: 4px solid #ff8a00;
-          font-size: 12px;
-          color: #666;
-        ">
-          <strong>Selected Text:</strong><br>
-          "${selectedText.substring(0, 100)}${selectedText.length > 100 ? '...' : ''}"
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(analysisPanel);
-
-    // Add close button functionality
-    const closeBtn = analysisPanel.querySelector('#close-analysis-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        this.removeExistingAnalysisDisplay();
-        this.removeExistingHighlights();
-      });
-    }
-
-    // Auto-close after 30 seconds
-    setTimeout(() => {
-      if (document.getElementById('going-bananas-analysis-panel')) {
-        this.removeExistingAnalysisDisplay();
-        this.removeExistingHighlights();
-      }
-    }, 30000);
-  }
-
-  private addWidgetAnimationStyles(): void {
-    if (document.getElementById('going-bananas-widget-styles')) return;
-
-    const style = document.createElement('style');
-    style.id = 'going-bananas-widget-styles';
-    style.textContent = `
-      @keyframes going-bananas-widget-appear {
-        from {
-          opacity: 0;
-          transform: translateY(-20px) scale(0.95);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0) scale(1);
-        }
-      }
-      
-      #going-bananas-analysis-panel {
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-      }
-      
-      #going-bananas-analysis-panel::-webkit-scrollbar {
-        width: 6px;
-      }
-      
-      #going-bananas-analysis-panel::-webkit-scrollbar-track {
-        background: #f1f5f9;
-        border-radius: 3px;
-      }
-      
-      #going-bananas-analysis-panel::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
-      }
-      
-      #going-bananas-analysis-panel::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  private addAnalysisPanelAnimation(): void {
-    // Use the new widget animation styles
-    this.addWidgetAnimationStyles();
-  }
-
-  private removeExistingAnalysisDisplay(): void {
-    const existingPanel = document.getElementById('going-bananas-analysis-panel');
-    if (existingPanel) {
-      existingPanel.remove();
-    }
-  }
-
-  private getRiskColor(riskLevel: string): string {
-    switch (riskLevel?.toLowerCase()) {
-      case 'low': return '#10b981';
-      case 'medium': return '#f59e0b';
-      case 'high': return '#ef4444';
-      default: return '#6b7280';
-    }
-  }
-
-  private getRiskIcon(riskLevel: string): string {
-    switch (riskLevel?.toLowerCase()) {
-      case 'low': return '✅';
-      case 'medium': return '⚠️';
-      case 'high': return '🚨';
-      default: return '❓';
-    }
-  }
-
-  // Loading and Error Display Methods
-  private showAnalysisLoadingIndicator(): void {
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.id = 'going-bananas-loading-indicator';
-    loadingIndicator.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 20px 30px;
-      border-radius: 12px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 16px;
-      font-weight: 500;
-      z-index: 999999;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    `;
-    
-    loadingIndicator.innerHTML = `
-      <div style="
-        width: 20px;
-        height: 20px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-top: 2px solid #ff8a00;
-        border-radius: 50%;
-        animation: going-bananas-spin 1s linear infinite;
-      "></div>
-      <span>Analyzing selected text...</span>
-    `;
-
-    document.body.appendChild(loadingIndicator);
-    this.addLoadingAnimation();
-  }
-
-  private hideAnalysisLoadingIndicator(): void {
-    const loadingIndicator = document.getElementById('going-bananas-loading-indicator');
-    if (loadingIndicator) {
-      loadingIndicator.remove();
-    }
-  }
-
-  private addLoadingAnimation(): void {
-    if (document.getElementById('going-bananas-loading-styles')) return;
-
-    const style = document.createElement('style');
-    style.id = 'going-bananas-loading-styles';
-    style.textContent = `
-      @keyframes going-bananas-spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  private showAnalysisError(error: any): void {
-    const errorPanel = document.createElement('div');
-    errorPanel.id = 'going-bananas-error-panel';
-    errorPanel.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      color: white;
-      padding: 24px 32px;
-      border-radius: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      z-index: 999999;
-      max-width: 450px;
-      text-align: center;
-      box-shadow: 0 12px 40px rgba(239, 68, 68, 0.4);
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-    `;
-    
-    errorPanel.innerHTML = `
-      <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
-      <div style="font-weight: 700; margin-bottom: 12px; font-size: 18px;">Analysis Failed</div>
-      <div style="opacity: 0.9; margin-bottom: 8px; line-height: 1.4;">${error.message || 'An error occurred while analyzing the text'}</div>
-      ${error.details ? `<div style="opacity: 0.8; font-size: 13px; margin-bottom: 16px; line-height: 1.3;">${error.details}</div>` : ''}
-      <button id="close-error-btn" style="
-        background: rgba(255, 255, 255, 0.2);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 8px;
-        margin-top: 8px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        transition: all 0.2s ease;
-      " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">Close</button>
-    `;
-
-    document.body.appendChild(errorPanel);
-
-    // Add close button functionality
-    const closeBtn = errorPanel.querySelector('#close-error-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        errorPanel.remove();
-      });
-    }
-
-    // Auto-close after 8 seconds (increased from 5)
-    setTimeout(() => {
-      if (document.getElementById('going-bananas-error-panel')) {
-        errorPanel.remove();
-      }
-    }, 8000);
-  }
-
-  private showInSituAnalysisResults(analysis: any, selectedText: string): void {
-    console.log('🎨 Creating analysis widget with data:', analysis);
-    
-    // Remove any existing analysis display
-    this.removeExistingAnalysisDisplay();
-    
-    // Get the position of the highlighted text
-    const highlightedElement = document.querySelector('.going-bananas-highlight');
-    let position = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
-    
-    if (highlightedElement) {
-      const rect = highlightedElement.getBoundingClientRect();
-      position = {
-        top: `${rect.bottom + window.scrollY + 20}px`,
-        left: `${rect.left + window.scrollX}px`,
-        transform: 'none'
-      };
-      console.log('📍 Positioned widget near highlighted text:', position);
-    } else {
-      console.log('📍 No highlighted element found, centering widget');
-    }
-    
-    // Create the styled analysis widget matching the extension design
-    const analysisWidget = document.createElement('div');
-    analysisWidget.id = 'going-bananas-analysis-panel';
-    analysisWidget.style.cssText = `
-      position: fixed;
-      top: ${position.top};
-      left: ${position.left};
-      transform: ${position.transform};
-      width: 400px;
-      max-height: 80vh;
-      background: linear-gradient(135deg, #7c3aed, #3b82f6);
-      border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      z-index: 999998;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      overflow: hidden;
-      animation: going-bananas-widget-appear 0.4s ease-out;
-      border: 2px solid rgba(255, 255, 255, 0.1);
-    `;
-
-    // Add the widget animation styles
-    this.addWidgetAnimationStyles();
-
-    const riskColor = this.getRiskColor(analysis.risk_level);
-    const riskIcon = this.getRiskIcon(analysis.risk_level);
-
-    analysisWidget.innerHTML = `
-      <!-- Header matching extension design -->
-      <div style="
-        background: linear-gradient(135deg, #fb923c, #ec4899);
-        color: white;
-        padding: 16px;
-        position: relative;
-      ">
-        <button id="close-analysis-btn" style="
-          position: absolute;
-          top: 12px;
-          right: 12px;
-          background: rgba(255,255,255,0.2);
-          border: none;
-          color: white;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          cursor: pointer;
-          font-size: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s ease;
-        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">×</button>
-        
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-          <span style="font-size: 28px;">🍌</span>
-          <div>
-            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">Going Bananas</h3>
-            <p style="margin: 0; font-size: 13px; opacity: 0.9;">Analysis Complete</p>
-          </div>
-        </div>
-        
-        <div style="display: flex; align-items: center; gap: 20px;">
-          <div style="text-align: center;">
-            <div style="font-size: 32px; font-weight: bold;">${analysis.risk_score?.toFixed(1) || 'N/A'}</div>
-            <div style="font-size: 12px; opacity: 0.9; font-weight: 500;">Risk Score</div>
-          </div>
-          <div style="flex: 1;">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <span style="font-size: 20px;">${riskIcon}</span>
-              <div style="font-size: 16px; font-weight: 600;">${analysis.risk_level?.toUpperCase() || 'UNKNOWN'} RISK</div>
-            </div>
-            <div style="font-size: 13px; opacity: 0.9;">${analysis.clause_type || 'general'} clause • ${analysis.user_impact || 'moderate'} impact</div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Content area with white background -->
-      <div style="
-        background: white;
-        padding: 20px;
-        max-height: 60vh;
-        overflow-y: auto;
-      ">
-        <!-- Summary Section -->
-        <div style="margin-bottom: 20px;">
-          <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">📋</span>
-            Summary
-          </h4>
-          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #4b5563; background: #f9fafb; padding: 12px; border-radius: 8px; border-left: 4px solid #fb923c;">
-            ${analysis.summary || 'No summary available'}
-          </p>
-        </div>
-        
-        ${analysis.key_points && analysis.key_points.length > 0 ? `
-          <div style="margin-bottom: 20px;">
-            <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 18px;">🔍</span>
-              Key Points
-            </h4>
-            <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px;">
-              <ul style="margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.5; color: #92400e;">
-                ${analysis.key_points.slice(0, 3).map((point: string) => `<li style="margin-bottom: 4px;">${point}</li>`).join('')}
-              </ul>
-            </div>
-          </div>
-        ` : ''}
-        
-        ${analysis.legal_implications && analysis.legal_implications.length > 0 ? `
-          <div style="margin-bottom: 20px;">
-            <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 18px;">⚖️</span>
-              Legal Implications
-            </h4>
-            <div style="background: #fef2f2; border: 1px solid #f87171; border-radius: 8px; padding: 12px;">
-              <ul style="margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.5; color: #991b1b;">
-                ${analysis.legal_implications.slice(0, 3).map((implication: string) => `<li style="margin-bottom: 4px;">${implication}</li>`).join('')}
-              </ul>
-            </div>
-          </div>
-        ` : ''}
-        
-        ${analysis.recommendations && analysis.recommendations.length > 0 ? `
-          <div style="margin-bottom: 20px;">
-            <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 18px;">💡</span>
-              Recommendations
-            </h4>
-            <div style="background: #f0fdf4; border: 1px solid #4ade80; border-radius: 8px; padding: 12px;">
-              <ul style="margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.5; color: #166534;">
-                ${analysis.recommendations.slice(0, 3).map((rec: string) => `<li style="margin-bottom: 4px;">${rec}</li>`).join('')}
-              </ul>
-            </div>
-          </div>
-        ` : ''}
-        
-        <!-- Selected Text Preview -->
-        <div style="
-          background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
-          padding: 16px;
-          border-radius: 12px;
-          border: 2px solid #d1d5db;
-          font-size: 13px;
-          color: #374151;
-          position: relative;
-          max-height: 200px;
-          overflow-y: auto;
-        ">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; color: #1f2937;">
-            <span style="font-size: 16px;">📝</span>
-            Selected Text
-          </div>
-          <div style="line-height: 1.4; background: white; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;">
-            "${selectedText}"
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(analysisWidget);
-    console.log('✅ Analysis widget added to DOM');
-
-    // Add close button functionality
-    const closeBtn = analysisWidget.querySelector('#close-analysis-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        this.removeExistingAnalysisDisplay();
-      });
-    }
-
-    // Auto-close after 45 seconds
-    setTimeout(() => {
-      if (document.getElementById('going-bananas-analysis-panel')) {
-        this.removeExistingAnalysisDisplay();
-      }
-    }, 45000);
   }
 }
 

@@ -13,7 +13,7 @@ export const Popup: React.FC = () => {
   const [selectedTermsContent, setSelectedTermsContent] = useState<string | null>(null);
   const [loadingTermsContent, setLoadingTermsContent] = useState<string | null>(null);
   const [toolbarActive, setToolbarActive] = useState(false);
-  const [selectedText, setSelectedText] = useState<string>('');
+  const [selectedBlocks, setSelectedBlocks] = useState<Array<{id: string, text: string, element: string}>>([]);
   const [notification, setNotification] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
 
   useEffect(() => {
@@ -90,18 +90,18 @@ export const Popup: React.FC = () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
         if (!toolbarActive) {
-          // Inject and show toolbar
-          chrome.tabs.sendMessage(tabs[0].id, { action: "showToolbar" }, (response) => {
+          // Inject and show block selector toolbar
+          chrome.tabs.sendMessage(tabs[0].id, { action: "showBlockSelector" }, (response) => {
             if (response && response.success) {
               setToolbarActive(true);
             }
           });
         } else {
-          // Hide toolbar
-          chrome.tabs.sendMessage(tabs[0].id, { action: "hideToolbar" }, (response) => {
+          // Hide block selector toolbar
+          chrome.tabs.sendMessage(tabs[0].id, { action: "hideBlockSelector" }, (response) => {
             if (response && response.success) {
               setToolbarActive(false);
-              setSelectedText('');
+              setSelectedBlocks([]);
             }
           });
         }
@@ -109,24 +109,27 @@ export const Popup: React.FC = () => {
     });
   };
 
-  const analyzeSelectedText = async () => {
-    if (!selectedText.trim()) {
-      showNotification('error', 'Please select some text first!');
+  const analyzeSelectedBlocks = async () => {
+    if (selectedBlocks.length === 0) {
+      showNotification('error', 'Please select some content blocks first!');
       return;
     }
 
-    if (selectedText.length < 10) {
-      showNotification('error', 'Selected text is too short. Please select at least 10 characters.');
+    // Combine all selected block texts
+    const combinedText = selectedBlocks.map(block => block.text).join('\n\n');
+    
+    if (combinedText.length < 10) {
+      showNotification('error', 'Selected content is too short to analyze (minimum 10 characters).');
       return;
     }
 
-    if (selectedText.length > 5000) {
-      showNotification('error', 'Selected text is too long. Please select text with 5000 characters or less.');
+    if (combinedText.length > 50000) {
+      showNotification('error', 'Selected content is too long (maximum 50,000 characters).');
       return;
     }
 
     try {
-      console.log('Analyzing selected text:', selectedText.substring(0, 100) + '...');
+      console.log('Analyzing selected blocks:', selectedBlocks.length, 'blocks, total length:', combinedText.length);
       
       // Get current tab URL for context
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -136,22 +139,20 @@ export const Popup: React.FC = () => {
       const apiUrl = await getApiUrl();
       console.log('Using API URL:', apiUrl);
       
-      // Use the new selected text analysis endpoint
-      const response = await fetch(`${apiUrl}/analyze/selected-text`, {
+      // Use the main analyze endpoint for block analysis
+      const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: selectedText,
+          text: combinedText,
           url: currentUrl,
-          context: 'Selected text from terms and conditions document',
           options: {
             language: 'en',
             detail_level: 'comprehensive',
-            focus_areas: ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms'],
-            include_recommendations: true,
-            risk_assessment: true
+            categories: ['privacy', 'liability', 'termination', 'payment'],
+            cache: true
           }
         }),
       });
@@ -162,46 +163,62 @@ export const Popup: React.FC = () => {
       }
 
       const result = await response.json();
-      console.log('Selected text analysis result:', result);
+      console.log('Selected blocks analysis result:', result);
       
       if (result.success && result.analysis) {
         // Send the analysis result to the content script to display
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (tabs[0]?.id) {
             chrome.tabs.sendMessage(tabs[0].id, { 
-              action: "showSelectedTextAnalysis", 
+              action: "showSelectedBlocksAnalysis", 
               data: result.analysis,
-              selectedText: selectedText
+              selectedBlocks: selectedBlocks
             });
           }
         });
         
-        showNotification('success', 'Text analysis completed successfully!');
+        showNotification('success', `Analysis complete! ${selectedBlocks.length} blocks analyzed.`);
       } else {
         throw new Error(result.error || 'Analysis failed - no analysis data returned');
       }
       
     } catch (error) {
-      console.error('Error analyzing selected text:', error);
+      console.error('Error analyzing selected blocks:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      showNotification('error', `Failed to analyze selected text: ${errorMessage}`);
+      showNotification('error', `Failed to analyze selected blocks: ${errorMessage}`);
     }
   };
 
-  // Listen for selected text updates
+  // Listen for selected blocks updates
   useEffect(() => {
     const messageListener = (message: any) => {
-      if (message.action === 'textSelected') {
-        setSelectedText(message.text);
+      if (message.action === 'blocksSelected') {
+        setSelectedBlocks(message.blocks || []);
       } else if (message.action === 'toolbarClosed') {
         setToolbarActive(false);
-        setSelectedText('');
+        setSelectedBlocks([]);
       }
     };
 
     chrome.runtime.onMessage.addListener(messageListener);
     return () => chrome.runtime.onMessage.removeListener(messageListener);
   }, []);
+
+  // Cleanup effect: Disable block selector when popup closes
+  useEffect(() => {
+    return () => {
+      // This runs when the popup component unmounts (i.e., when popup is closed)
+      if (toolbarActive) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, { action: "hideBlockSelector" }, () => {
+              // Ignore response since popup is closing
+            });
+          }
+        });
+      }
+    };
+  }, [toolbarActive]); // Re-run when toolbarActive changes
 
   return (
     <div className="w-80 h-96 bg-gradient-to-br from-purple-600 to-blue-600 overflow-hidden">
@@ -236,29 +253,36 @@ export const Popup: React.FC = () => {
         {toolbarActive && (
           <div className="mt-3 p-3 bg-white/20 rounded-lg">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Hover Analysis Active</span>
+              <span className="text-sm font-medium">Block Selector Active</span>
               <span className="text-xs bg-white/20 px-2 py-1 rounded">
-                {selectedText ? `${selectedText.length} chars` : 'Ready to analyze'}
+                {selectedBlocks.length > 0 ? `${selectedBlocks.length} blocks selected` : 'Ready to select'}
               </span>
             </div>
             
-            {selectedText && (
+            {selectedBlocks.length > 0 && (
               <div className="space-y-2">
                 <div className="text-xs bg-white/10 p-2 rounded max-h-16 overflow-y-auto">
-                  "{selectedText.substring(0, 100)}{selectedText.length > 100 ? '...' : ''}"
+                  {selectedBlocks.length} content blocks selected ({selectedBlocks.reduce((total, block) => total + block.text.length, 0)} chars total)
+                </div>
+                <div className="max-h-20 overflow-y-auto text-xs text-white/90">
+                  {selectedBlocks.map((block, index) => (
+                    <div key={block.id} className="truncate">
+                      {index + 1}. {block.element}: {block.text.substring(0, 50)}...
+                    </div>
+                  ))}
                 </div>
                 <button
-                  onClick={analyzeSelectedText}
+                  onClick={analyzeSelectedBlocks}
                   className="w-full py-2 px-3 bg-white text-purple-600 rounded hover:bg-gray-100 transition-colors text-sm font-medium"
                 >
-                  Analyze Selected Text
+                  Analyze Selected Blocks
                 </button>
               </div>
             )}
             
-            {!selectedText && (
+            {selectedBlocks.length === 0 && (
               <div className="text-xs text-white/80">
-                💡 Hover over any text on the page to analyze it
+                💡 Click on content blocks on the page to select them for analysis
               </div>
             )}
           </div>
