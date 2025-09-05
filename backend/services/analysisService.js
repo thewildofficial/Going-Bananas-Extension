@@ -64,8 +64,68 @@ class AnalysisService {
         options: options
       });
 
-      // Return a fallback analysis on error
-      return this.generateFallbackAnalysis(text, error, options);
+      // Re-throw the error instead of falling back
+      throw error;
+    }
+  }
+
+  async analyzeSelectedText(text, options = {}) {
+    const startTime = Date.now();
+    
+    try {
+      // Validate input for selected text (more lenient than full document)
+      if (!text || typeof text !== 'string') {
+        throw new Error('Invalid selected text input for analysis');
+      }
+
+      if (text.length < 10) {
+        throw new Error('Selected text too short for analysis');
+      }
+
+      if (text.length > 5000) {
+        throw new Error('Selected text too long for analysis');
+      }
+
+      logger.info('Starting selected text analysis:', {
+        textLength: text.length,
+        options: options
+      });
+
+      // Set timeout for analysis (shorter for selected text)
+      const analysisPromise = this.performSelectedTextAnalysis(text, options);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Selected text analysis timeout')), this.analysisTimeout / 2);
+      });
+
+      const rawAnalysis = await Promise.race([analysisPromise, timeoutPromise]);
+
+      // Post-process and validate the analysis
+      const processedAnalysis = await this.postProcessSelectedTextAnalysis(rawAnalysis, text, options);
+
+      // Log successful analysis
+      const processingTime = Date.now() - startTime;
+      logger.info('Selected text analysis completed successfully:', {
+        textLength: text.length,
+        riskScore: processedAnalysis.risk_score,
+        riskLevel: processedAnalysis.risk_level,
+        confidence: processedAnalysis.confidence,
+        processingTime: processingTime
+      });
+
+      return processedAnalysis;
+
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      
+      logger.error('Selected text analysis failed:', {
+        error: error.message,
+        textLength: text.length,
+        processingTime: processingTime,
+        options: options
+      });
+
+      // Re-throw the error instead of falling back
+      throw error;
     }
   }
 
@@ -433,7 +493,7 @@ class AnalysisService {
     return {
       risk_score: riskScore,
       risk_level: this.calculateRiskLevelFromScore(riskScore),
-      summary: 'Analysis completed with limited accuracy due to technical issues. Manual review strongly recommended.',
+      summary: 'Analysis completed using heuristic analysis. Manual review strongly recommended for complete understanding.',
       key_points: [
         'Automated analysis encountered technical difficulties',
         'Manual review of terms and conditions is strongly recommended',
@@ -459,6 +519,266 @@ class AnalysisService {
         key_risk_factors: [],
         recommendations: ['Technical error occurred - seek manual legal review'],
         comparative_risk: 'Unable to assess due to technical issues'
+      }
+    };
+  }
+
+  async performSelectedTextAnalysis(text, options) {
+    try {
+      // Create specialized options for selected text analysis
+      const selectedTextOptions = {
+        ...options,
+        selectedTextAnalysis: true,
+        detail_level: 'comprehensive',
+        // Use a specialized prompt for selected text
+        analysisType: 'selected_clause'
+      };
+
+      // Use Gemini service for analysis with specialized prompt
+      const analysis = await this.geminiService.analyzeSelectedText(text, selectedTextOptions);
+
+      if (!analysis || typeof analysis !== 'object') {
+        throw new Error('Invalid analysis response from Gemini service for selected text');
+      }
+
+      return analysis;
+    } catch (error) {
+      logger.error('Gemini selected text analysis failed:', error.message);
+      throw error;
+    }
+  }
+
+  async postProcessSelectedTextAnalysis(rawAnalysis, originalText, options) {
+    try {
+      // Create the processed analysis object for selected text
+      const analysis = {
+        // Core analysis results
+        risk_score: this.validateRiskScore(rawAnalysis.risk_score),
+        risk_level: this.validateRiskLevel(rawAnalysis.risk_level),
+        summary: this.validateSummary(rawAnalysis.summary),
+        key_points: this.validateKeyPoints(rawAnalysis.key_points),
+        categories: this.validateCategories(rawAnalysis.categories),
+        confidence: this.validateConfidence(rawAnalysis.confidence),
+
+        // Selected text specific fields
+        clause_type: rawAnalysis.clause_type || 'general',
+        legal_implications: rawAnalysis.legal_implications || [],
+        user_impact: rawAnalysis.user_impact || 'moderate',
+        recommendations: rawAnalysis.recommendations || [],
+
+        // Metadata
+        analysis_time: Date.now(),
+        word_count: originalText.split(/\s+/).length,
+        char_count: originalText.length,
+        language: options.language || 'en',
+        detail_level: 'comprehensive',
+        analysis_type: 'selected_text',
+
+        // Processing flags
+        fallback: rawAnalysis.fallback || false,
+        mock: rawAnalysis.mock || false,
+        selected_text_analysis: true,
+
+        // Analysis version for tracking
+        analyzer_version: '1.0.0'
+      };
+
+      // Ensure risk level matches score
+      analysis.risk_level = this.calculateRiskLevelFromScore(analysis.risk_score);
+
+      // Add additional insights for selected text
+      analysis.insights = this.generateSelectedTextInsights(analysis, originalText);
+
+      // Validate overall coherence
+      this.validateAnalysisCoherence(analysis);
+
+      return analysis;
+
+    } catch (error) {
+      logger.error('Selected text post-processing failed:', error.message);
+      throw new Error('Selected text analysis post-processing failed');
+    }
+  }
+
+  generateSelectedTextInsights(analysis, originalText) {
+    const insights = {
+      clause_complexity: this.assessClauseComplexity(originalText),
+      key_risk_factors: this.identifyKeyRiskFactors(analysis),
+      recommendations: this.generateSelectedTextRecommendations(analysis),
+      comparative_risk: this.getComparativeRisk(analysis.risk_score),
+      legal_significance: this.assessLegalSignificance(analysis, originalText)
+    };
+
+    return insights;
+  }
+
+  assessClauseComplexity(text) {
+    const words = text.split(/\s+/);
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const avgWordsPerSentence = words.length / sentences.length;
+    
+    // Legal complexity assessment
+    let complexity = 'standard';
+    if (avgWordsPerSentence > 25 || text.length > 2000) {
+      complexity = 'high';
+    } else if (avgWordsPerSentence < 8 && text.length < 200) {
+      complexity = 'low';
+    }
+
+    return {
+      level: complexity,
+      word_count: words.length,
+      sentence_count: sentences.length,
+      avg_words_per_sentence: Math.round(avgWordsPerSentence),
+      legal_terminology_density: this.calculateLegalTerminologyDensity(text)
+    };
+  }
+
+  calculateLegalTerminologyDensity(text) {
+    const legalTerms = [
+      'liability', 'indemnify', 'waive', 'disclaim', 'arbitration', 'jurisdiction',
+      'terminate', 'suspend', 'breach', 'damages', 'compensation', 'remedy',
+      'covenant', 'warranty', 'representation', 'condition', 'obligation'
+    ];
+    
+    const words = text.toLowerCase().split(/\s+/);
+    const legalTermCount = legalTerms.reduce((count, term) => {
+      return count + (words.filter(word => word.includes(term)).length);
+    }, 0);
+    
+    return Math.round((legalTermCount / words.length) * 100);
+  }
+
+  assessLegalSignificance(analysis, text) {
+    let significance = 'moderate';
+    
+    if (analysis.risk_score >= 8) {
+      significance = 'high';
+    } else if (analysis.risk_score <= 3) {
+      significance = 'low';
+    }
+
+    // Check for high-impact keywords
+    const highImpactKeywords = ['liability', 'indemnify', 'arbitration', 'terminate', 'waive'];
+    const hasHighImpactKeywords = highImpactKeywords.some(keyword => 
+      text.toLowerCase().includes(keyword)
+    );
+
+    if (hasHighImpactKeywords && analysis.risk_score >= 6) {
+      significance = 'high';
+    }
+
+    return {
+      level: significance,
+      factors: this.identifySignificanceFactors(analysis, text)
+    };
+  }
+
+  identifySignificanceFactors(analysis, text) {
+    const factors = [];
+    
+    if (analysis.risk_score >= 7) {
+      factors.push('High risk score indicates significant legal implications');
+    }
+    
+    if (text.toLowerCase().includes('liability')) {
+      factors.push('Contains liability-related language');
+    }
+    
+    if (text.toLowerCase().includes('arbitration')) {
+      factors.push('Contains arbitration clauses');
+    }
+    
+    if (text.toLowerCase().includes('terminate')) {
+      factors.push('Contains termination provisions');
+    }
+
+    return factors;
+  }
+
+  generateSelectedTextRecommendations(analysis) {
+    const recommendations = [];
+
+    if (analysis.risk_score >= 7) {
+      recommendations.push('This clause requires careful review - consider seeking legal advice');
+    }
+
+    if (analysis.clause_type === 'privacy' && analysis.risk_score >= 6) {
+      recommendations.push('Pay special attention to data collection and usage rights');
+    }
+
+    if (analysis.clause_type === 'liability' && analysis.risk_score >= 6) {
+      recommendations.push('Review liability limitations and your potential exposure');
+    }
+
+    if (analysis.legal_implications && analysis.legal_implications.length > 0) {
+      recommendations.push('Consider the broader legal implications of this clause');
+    }
+
+    if (recommendations.length === 0) {
+      recommendations.push('This clause appears reasonable but always read carefully');
+    }
+
+    return recommendations;
+  }
+
+  generateFallbackSelectedTextAnalysis(text, error, options) {
+    logger.warn('Generating fallback selected text analysis due to error:', error.message);
+
+    const wordCount = text.split(/\s+/).length;
+    
+    // Simple heuristic-based analysis for selected text
+    let riskScore = 5.0;
+    
+    // Basic keyword detection for selected text
+    const riskKeywords = [
+      'liability', 'disclaim', 'terminate', 'suspend', 'collect', 'share',
+      'third party', 'binding arbitration', 'waive', 'indemnify', 'breach'
+    ];
+    
+    const foundKeywords = riskKeywords.filter(keyword => 
+      text.toLowerCase().includes(keyword.toLowerCase())
+    );
+    
+    riskScore += foundKeywords.length * 0.8;
+    riskScore = Math.min(10, Math.max(1, riskScore));
+
+    return {
+      risk_score: riskScore,
+      risk_level: this.calculateRiskLevelFromScore(riskScore),
+      summary: 'Selected text analysis completed using heuristic analysis. Manual review recommended for complete understanding.',
+      key_points: [
+        'Heuristic analysis completed successfully',
+        'Manual review of this clause is recommended',
+        `Clause contains ${foundKeywords.length} potential risk keywords`
+      ],
+      categories: {
+        privacy: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] },
+        liability: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] },
+        termination: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] },
+        payment: { score: 5.0, concerns: ['Analysis incomplete - manual review required'] }
+      },
+      confidence: 0.3,
+      clause_type: 'general',
+      legal_implications: ['Technical error occurred - seek manual legal review'],
+      user_impact: 'unknown',
+      recommendations: ['Technical error occurred - seek manual legal review'],
+      analysis_time: Date.now(),
+      word_count: wordCount,
+      char_count: text.length,
+      language: options.language || 'en',
+      detail_level: 'comprehensive',
+      analysis_type: 'selected_text',
+      fallback: true,
+      error_type: error.message,
+      analyzer_version: '1.0.0',
+      selected_text_analysis: true,
+      insights: {
+        clause_complexity: { level: 'unknown', word_count: wordCount },
+        key_risk_factors: [],
+        recommendations: ['Technical error occurred - seek manual legal review'],
+        comparative_risk: 'Unable to assess due to technical issues',
+        legal_significance: { level: 'unknown', factors: ['Technical error occurred'] }
       }
     };
   }

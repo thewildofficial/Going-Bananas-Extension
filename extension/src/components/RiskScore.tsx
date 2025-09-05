@@ -3,6 +3,7 @@ import React from 'react';
 import { RiskLevel } from '@/types';
 import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
+import { renderMarkdownText } from '@/utils/markdown';
 
 interface RiskScoreProps {
   score: number;
@@ -56,9 +57,10 @@ export const RiskScore: React.FC<RiskScoreProps> = ({ score, level, description 
             </div>
           </div>
           {description && (
-            <p className="text-sm opacity-75 mt-1">
-              {description}
-            </p>
+            <p 
+              className="text-sm opacity-75 mt-1"
+              dangerouslySetInnerHTML={{ __html: renderMarkdownText(description) }}
+            />
           )}
         </div>
       </div>
