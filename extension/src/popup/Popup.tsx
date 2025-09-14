@@ -218,70 +218,89 @@ export const Popup: React.FC = () => {
     };
   }, [toolbarActive]); // Re-run when toolbarActive changes
 
-  // Beautiful inline styles
+  // Beautiful enhanced inline styles
   const containerStyle: React.CSSProperties = {
-    width: '380px',
-    height: '600px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    width: '400px',
+    height: '650px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     fontSize: '14px',
-    lineHeight: '1.4',
-    color: '#333',
+    lineHeight: '1.5',
+    color: '#1a1a1a',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    borderRadius: '8px',
-    margin: '8px',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+    borderRadius: '16px',
+    margin: '12px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15), 0 8px 25px rgba(0, 0, 0, 0.1)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)'
   };
 
   const headerStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '16px 20px',
-    background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
-    color: 'white'
+    padding: '20px 24px',
+    background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 50%, #ffa8a8 100%)',
+    color: 'white',
+    borderRadius: '16px 16px 0 0',
+    boxShadow: '0 4px 20px rgba(255, 107, 107, 0.3)',
+    position: 'relative',
+    overflow: 'hidden'
   };
 
   const logoStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '12px',
+    position: 'relative',
+    zIndex: 2
   };
 
   const bananaIconStyle: React.CSSProperties = {
-    fontSize: '24px'
+    fontSize: '28px',
+    filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))',
+    animation: 'bounce 2s infinite'
   };
 
   const titleStyle: React.CSSProperties = {
-    fontSize: '18px',
-    fontWeight: '600',
-    margin: 0
+    fontSize: '20px',
+    fontWeight: '700',
+    margin: 0,
+    textShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+    letterSpacing: '-0.5px'
   };
 
   const buttonStyle: React.CSSProperties = {
-    background: 'rgba(255, 255, 255, 0.2)',
+    background: 'rgba(255, 255, 255, 0.15)',
     border: 'none',
-    borderRadius: '50%',
-    width: '36px',
-    height: '36px',
+    borderRadius: '12px',
+    width: '40px',
+    height: '40px',
     cursor: 'pointer',
     fontSize: '16px',
-    transition: 'background 0.2s',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    position: 'relative',
+    zIndex: 2
   };
 
   const buttonHoverStyle: React.CSSProperties = {
-    background: 'rgba(255, 255, 255, 0.3)'
+    background: 'rgba(255, 255, 255, 0.25)',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.2)'
   };
 
   const mainContentStyle: React.CSSProperties = {
     flex: 1,
-    background: '#fff',
-    overflowY: 'auto'
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    overflowY: 'auto',
+    borderRadius: '0 0 16px 16px'
   };
 
   const loadingStyle: React.CSSProperties = {
@@ -340,9 +359,13 @@ export const Popup: React.FC = () => {
   };
 
   const riskHeaderStyle: React.CSSProperties = {
-    padding: '20px',
+    padding: '24px',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: 'white'
+    color: 'white',
+    borderRadius: '16px 16px 0 0',
+    boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+    position: 'relative',
+    overflow: 'hidden'
   };
 
   const riskScoreStyle: React.CSSProperties = {
@@ -352,51 +375,64 @@ export const Popup: React.FC = () => {
   };
 
   const scoreCircleStyle: React.CSSProperties = {
-    width: '60px',
-    height: '60px',
+    width: '70px',
+    height: '70px',
     borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.2)',
+    background: 'rgba(255, 255, 255, 0.15)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '3px solid rgba(255, 255, 255, 0.3)'
+    border: '3px solid rgba(255, 255, 255, 0.3)',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+    position: 'relative',
+    zIndex: 2
   };
 
   const scoreNumberStyle: React.CSSProperties = {
-    fontSize: '20px',
-    fontWeight: '700'
+    fontSize: '24px',
+    fontWeight: '800',
+    textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
   };
 
   const riskLevelStyle: React.CSSProperties = {
-    fontSize: '18px',
-    fontWeight: '600',
-    marginBottom: '4px',
-    margin: 0
+    fontSize: '20px',
+    fontWeight: '700',
+    marginBottom: '6px',
+    margin: '0 0 6px 0',
+    textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+    letterSpacing: '-0.5px'
   };
 
   const riskDescriptionStyle: React.CSSProperties = {
-    opacity: 0.9,
-    fontSize: '13px',
-    margin: 0
+    opacity: 0.95,
+    fontSize: '14px',
+    margin: 0,
+    textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+    lineHeight: '1.4'
   };
 
   const sectionStyle: React.CSSProperties = {
-    padding: '20px',
-    borderBottom: '1px solid #f0f0f0'
+    padding: '24px',
+    borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+    background: 'rgba(255, 255, 255, 0.5)',
+    backdropFilter: 'blur(10px)'
   };
 
   const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '16px',
-    fontWeight: '600',
-    marginBottom: '12px',
-    color: '#333',
-    margin: '0 0 12px 0'
+    fontSize: '18px',
+    fontWeight: '700',
+    marginBottom: '16px',
+    color: '#1a1a1a',
+    margin: '0 0 16px 0',
+    letterSpacing: '-0.5px'
   };
 
   const summaryTextStyle: React.CSSProperties = {
-    color: '#555',
-    lineHeight: '1.5',
-    margin: 0
+    color: '#4a5568',
+    lineHeight: '1.6',
+    margin: 0,
+    fontSize: '15px'
   };
 
   const keyPointsListStyle: React.CSSProperties = {
@@ -408,41 +444,51 @@ export const Popup: React.FC = () => {
   const keyPointStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '12px',
-    padding: '12px',
-    borderRadius: '8px',
-    background: '#f8f9fa'
+    gap: '16px',
+    marginBottom: '16px',
+    padding: '16px',
+    borderRadius: '12px',
+    background: 'rgba(248, 249, 250, 0.8)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(0, 0, 0, 0.05)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+    transition: 'all 0.3s ease'
   };
 
   const keyPointHighStyle: React.CSSProperties = {
     ...keyPointStyle,
-    background: '#fee',
-    borderLeft: '4px solid #ff4757'
+    background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+    borderLeft: '4px solid #ef4444',
+    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
   };
 
   const keyPointMediumStyle: React.CSSProperties = {
     ...keyPointStyle,
-    background: '#fffbe5',
-    borderLeft: '4px solid #ffa726'
+    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+    borderLeft: '4px solid #f59e0b',
+    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.15)'
   };
 
   const keyPointLowStyle: React.CSSProperties = {
     ...keyPointStyle,
-    background: '#f0fff4',
-    borderLeft: '4px solid #27ae60'
+    background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+    borderLeft: '4px solid #10b981',
+    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
   };
 
   const pointIconStyle: React.CSSProperties = {
-    fontSize: '14px',
-    marginTop: '2px'
+    fontSize: '18px',
+    marginTop: '2px',
+    filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1))'
   };
 
   const pointTextStyle: React.CSSProperties = {
     flex: 1,
-    color: '#555',
-    lineHeight: '1.4',
-    margin: 0
+    color: '#374151',
+    lineHeight: '1.5',
+    margin: 0,
+    fontSize: '14px',
+    fontWeight: '500'
   };
 
   const categoryItemStyle: React.CSSProperties = {
