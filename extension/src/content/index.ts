@@ -1289,6 +1289,11 @@ class TermsAnalyzer {
     this.aggressiveStyleCleanup(); // Fallback cleanup for any missed elements
     this.removeBlockSelectorToolbar();
     this.stopExtensionConnectionCheck();
+    
+    // Additional ultra-aggressive cleanup after a short delay to catch any lingering effects
+    setTimeout(() => {
+      this.ultraAggressiveCleanup();
+    }, 200);
   }
 
   private createBlockSelectorToolbar(): void {
@@ -1659,10 +1664,15 @@ class TermsAnalyzer {
       try {
         const element = block.domElement;
         if (element && element.parentNode) {
-          // Restore original styles
+          // Restore original styles completely
           element.style.border = block.originalStyles.border;
           element.style.backgroundColor = block.originalStyles.backgroundColor;
           element.style.cursor = '';
+          element.style.outline = ''; // Also clear outline
+          
+          // Remove any classes we might have added
+          element.classList.remove('going-bananas-selected', 'going-bananas-analyzed');
+          
           console.log(`✅ Cleared block ${index + 1}: ${block.element}`);
         } else {
           console.log(`⚠️ Block ${index + 1} element no longer in DOM`);
@@ -1677,7 +1687,60 @@ class TermsAnalyzer {
     this.updateBlockCountDisplay();
     this.notifyPopupOfSelection();
     
+    // Additional aggressive cleanup after regular cleanup
+    setTimeout(() => {
+      this.ultraAggressiveCleanup();
+    }, 100);
+    
     console.log('🧹 All selected blocks cleared');
+  }
+
+  // Ultra-aggressive cleanup method for stubborn styles
+  private ultraAggressiveCleanup(): void {
+    console.log('💥 Performing ultra-aggressive style cleanup...');
+    
+    // Remove any elements with our specific IDs that might be lingering
+    const goingBananasElements = document.querySelectorAll('[id*="going-bananas"], [class*="going-bananas"]');
+    goingBananasElements.forEach((el) => {
+      if (el.id !== 'going-bananas-result') { // Keep analysis results
+        console.log(`🗑️ Removing lingering element: ${el.id || el.className}`);
+        el.remove();
+      }
+    });
+    
+    // Clear any inline styles that match our patterns more aggressively
+    const allElements = document.querySelectorAll('*');
+    let cleanedCount = 0;
+    
+    allElements.forEach((element: Element) => {
+      const htmlElement = element as HTMLElement;
+      const computedStyle = window.getComputedStyle(htmlElement);
+      
+      // Check computed styles for our colors and reset if found
+      if (computedStyle.borderColor && (
+          computedStyle.borderColor.includes('229, 46, 113') ||
+          computedStyle.borderColor.includes('255, 138, 0')
+        )) {
+        htmlElement.style.border = 'none';
+        cleanedCount++;
+      }
+      
+      if (computedStyle.backgroundColor && (
+          computedStyle.backgroundColor.includes('229, 46, 113') ||
+          computedStyle.backgroundColor.includes('255, 138, 0')
+        )) {
+        htmlElement.style.backgroundColor = 'transparent';
+        cleanedCount++;
+      }
+      
+      // Force remove any transition that might be keeping styles
+      if (htmlElement.style.transition && htmlElement.style.transition.includes('border')) {
+        htmlElement.style.transition = '';
+        cleanedCount++;
+      }
+    });
+    
+    console.log(`💥 Ultra-aggressive cleanup completed: ${cleanedCount} additional fixes applied`);
   }
 
   private clearBlockHighlights(): void {
@@ -1726,26 +1789,59 @@ class TermsAnalyzer {
       const htmlElement = element as HTMLElement;
       const style = htmlElement.style;
       
-      // Look for elements with our specific styles
+      // Look for ANY border styles that might be ours (more comprehensive)
       if (style.border && (
           style.border.includes('2px solid #e52e71') ||     // Selection style
-          style.border.includes('2px dashed #ff8a00')       // Hover style
+          style.border.includes('2px dashed #ff8a00') ||    // Hover style  
+          style.border.includes('2px solid') ||             // Any 2px solid border
+          style.border.includes('2px dashed') ||            // Any 2px dashed border
+          style.border.includes('#e52e71') ||               // Our pink color
+          style.border.includes('#ff8a00') ||               // Our orange color
+          style.border.includes('rgba(229, 46, 113') ||     // Pink rgba variations
+          style.border.includes('rgba(255, 138, 0')         // Orange rgba variations
         )) {
+        const originalBorder = style.border;
         style.border = '';
+        console.log(`🧽 Cleaned border: ${originalBorder}`);
         cleanedCount++;
       }
       
+      // Look for ANY background colors that might be ours
       if (style.backgroundColor && (
           style.backgroundColor.includes('rgba(229, 46, 113, 0.2)') ||  // Selection background
-          style.backgroundColor.includes('rgba(255, 138, 0, 0.1)')      // Hover background
+          style.backgroundColor.includes('rgba(255, 138, 0, 0.1)') ||   // Hover background
+          style.backgroundColor.includes('rgba(229, 46, 113') ||        // Any pink rgba
+          style.backgroundColor.includes('rgba(255, 138, 0') ||         // Any orange rgba
+          style.backgroundColor === 'rgb(229, 46, 113)' ||              // Solid pink
+          style.backgroundColor === 'rgb(255, 138, 0)' ||               // Solid orange
+          style.backgroundColor.includes('#e52e71') ||                   // Hex pink
+          style.backgroundColor.includes('#ff8a00')                     // Hex orange
         )) {
+        const originalBg = style.backgroundColor;
         style.backgroundColor = '';
+        console.log(`🧽 Cleaned background: ${originalBg}`);
+        cleanedCount++;
+      }
+      
+      // Reset cursor if it was set by us
+      if (style.cursor === 'pointer') {
+        style.cursor = '';
         cleanedCount++;
       }
       
       // Clean up any remaining block selector data
       if ((htmlElement as any).__blockSelectorData) {
         delete (htmlElement as any).__blockSelectorData;
+        cleanedCount++;
+      }
+      
+      // Also check for outline styles that might be applied
+      if (style.outline && (
+          style.outline.includes('#e52e71') ||
+          style.outline.includes('#ff8a00') ||
+          style.outline.includes('2px')
+        )) {
+        style.outline = '';
         cleanedCount++;
       }
     });
