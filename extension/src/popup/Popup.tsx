@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useAnalysis } from '@/hooks/useAnalysis';
-import { RiskScore } from '@/components/RiskScore';
-import { KeyPoints } from '@/components/KeyPoints';
 import { Settings, RefreshCw, Search, Share, Edit3 } from 'lucide-react';
 import { getApiUrl } from '@/utils/config';
 import { renderMarkdownText } from '@/utils/markdown';
@@ -220,94 +218,483 @@ export const Popup: React.FC = () => {
     };
   }, [toolbarActive]); // Re-run when toolbarActive changes
 
-  return (
-    <div className="w-80 h-96 bg-gradient-to-br from-purple-600 to-blue-600 overflow-hidden">
-      <div className="bg-gradient-to-r from-orange-400 to-pink-500 p-4 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🍌</span>
-            <h1 className="font-bold text-lg">Going Bananas</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleToolbar}
-              className={`p-2 rounded-full transition-colors ${
-                toolbarActive 
-                  ? 'bg-white/30 text-white' 
-                  : 'hover:bg-white/20'
-              }`}
-              title={toolbarActive ? 'Hide Hover Analysis' : 'Show Hover Analysis'}
-            >
-              <Edit3 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleSettings}
-              className="p-2 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+  // Beautiful inline styles
+  const containerStyle: React.CSSProperties = {
+    width: '380px',
+    height: '600px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontSize: '14px',
+    lineHeight: '1.4',
+    color: '#333',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: '8px',
+    margin: '8px',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+  };
 
-        {/* Toolbar Status and Hover Analysis Display */}
-        {toolbarActive && (
-          <div className="mt-3 p-3 bg-white/20 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Block Selector Active</span>
-              <span className="text-xs bg-white/20 px-2 py-1 rounded">
-                {selectedBlocks.length > 0 ? `${selectedBlocks.length} blocks selected` : 'Ready to select'}
-              </span>
-            </div>
-            
-            {selectedBlocks.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs bg-white/10 p-2 rounded max-h-16 overflow-y-auto">
-                  {selectedBlocks.length} content blocks selected ({selectedBlocks.reduce((total, block) => total + block.text.length, 0)} chars total)
-                </div>
-                <div className="max-h-20 overflow-y-auto text-xs text-white/90">
-                  {selectedBlocks.map((block, index) => (
-                    <div key={block.id} className="truncate">
-                      {index + 1}. {block.element}: {block.text.substring(0, 50)}...
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={analyzeSelectedBlocks}
-                  className="w-full py-2 px-3 bg-white text-purple-600 rounded hover:bg-gray-100 transition-colors text-sm font-medium"
-                >
-                  Analyze Selected Blocks
-                </button>
-              </div>
-            )}
-            
-            {selectedBlocks.length === 0 && (
-              <div className="text-xs text-white/80">
-                💡 Click on content blocks on the page to select them for analysis
-              </div>
-            )}
+  const headerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px 20px',
+    background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
+    color: 'white'
+  };
+
+  const logoStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  };
+
+  const bananaIconStyle: React.CSSProperties = {
+    fontSize: '24px'
+  };
+
+  const titleStyle: React.CSSProperties = {
+    fontSize: '18px',
+    fontWeight: '600',
+    margin: 0
+  };
+
+  const buttonStyle: React.CSSProperties = {
+    background: 'rgba(255, 255, 255, 0.2)',
+    border: 'none',
+    borderRadius: '50%',
+    width: '36px',
+    height: '36px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    transition: 'background 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  };
+
+  const buttonHoverStyle: React.CSSProperties = {
+    background: 'rgba(255, 255, 255, 0.3)'
+  };
+
+  const mainContentStyle: React.CSSProperties = {
+    flex: 1,
+    background: '#fff',
+    overflowY: 'auto'
+  };
+
+  const loadingStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 20px'
+  };
+
+  const spinnerStyle: React.CSSProperties = {
+    width: '40px',
+    height: '40px',
+    border: '3px solid #f3f3f3',
+    borderTop: '3px solid #ff6b95',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+    marginBottom: '16px'
+  };
+
+  const noTermsStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 20px',
+    textAlign: 'center'
+  };
+
+  const emptyIconStyle: React.CSSProperties = {
+    fontSize: '48px',
+    marginBottom: '16px',
+    opacity: 0.5
+  };
+
+  const scanButtonStyle: React.CSSProperties = {
+    background: '#ff6b95',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '12px 24px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  };
+
+  const resultsStyle: React.CSSProperties = {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '0 0 20px 0'
+  };
+
+  const riskHeaderStyle: React.CSSProperties = {
+    padding: '20px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    color: 'white'
+  };
+
+  const riskScoreStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px'
+  };
+
+  const scoreCircleStyle: React.CSSProperties = {
+    width: '60px',
+    height: '60px',
+    borderRadius: '50%',
+    background: 'rgba(255, 255, 255, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '3px solid rgba(255, 255, 255, 0.3)'
+  };
+
+  const scoreNumberStyle: React.CSSProperties = {
+    fontSize: '20px',
+    fontWeight: '700'
+  };
+
+  const riskLevelStyle: React.CSSProperties = {
+    fontSize: '18px',
+    fontWeight: '600',
+    marginBottom: '4px',
+    margin: 0
+  };
+
+  const riskDescriptionStyle: React.CSSProperties = {
+    opacity: 0.9,
+    fontSize: '13px',
+    margin: 0
+  };
+
+  const sectionStyle: React.CSSProperties = {
+    padding: '20px',
+    borderBottom: '1px solid #f0f0f0'
+  };
+
+  const sectionTitleStyle: React.CSSProperties = {
+    fontSize: '16px',
+    fontWeight: '600',
+    marginBottom: '12px',
+    color: '#333',
+    margin: '0 0 12px 0'
+  };
+
+  const summaryTextStyle: React.CSSProperties = {
+    color: '#555',
+    lineHeight: '1.5',
+    margin: 0
+  };
+
+  const keyPointsListStyle: React.CSSProperties = {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0
+  };
+
+  const keyPointStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '12px',
+    marginBottom: '12px',
+    padding: '12px',
+    borderRadius: '8px',
+    background: '#f8f9fa'
+  };
+
+  const keyPointHighStyle: React.CSSProperties = {
+    ...keyPointStyle,
+    background: '#fee',
+    borderLeft: '4px solid #ff4757'
+  };
+
+  const keyPointMediumStyle: React.CSSProperties = {
+    ...keyPointStyle,
+    background: '#fffbe5',
+    borderLeft: '4px solid #ffa726'
+  };
+
+  const keyPointLowStyle: React.CSSProperties = {
+    ...keyPointStyle,
+    background: '#f0fff4',
+    borderLeft: '4px solid #27ae60'
+  };
+
+  const pointIconStyle: React.CSSProperties = {
+    fontSize: '14px',
+    marginTop: '2px'
+  };
+
+  const pointTextStyle: React.CSSProperties = {
+    flex: 1,
+    color: '#555',
+    lineHeight: '1.4',
+    margin: 0
+  };
+
+  const categoryItemStyle: React.CSSProperties = {
+    marginBottom: '16px',
+    border: '1px solid #e9ecef',
+    borderRadius: '8px',
+    overflow: 'hidden'
+  };
+
+  const categoryHeaderStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px 16px',
+    background: '#f8f9fa',
+    cursor: 'pointer',
+    transition: 'background 0.2s'
+  };
+
+  const categoryIconStyle: React.CSSProperties = {
+    fontSize: '16px',
+    marginRight: '12px'
+  };
+
+  const categoryNameStyle: React.CSSProperties = {
+    flex: 1,
+    fontWeight: '500'
+  };
+
+  const categoryScoreStyle: React.CSSProperties = {
+    fontWeight: '600',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    fontSize: '12px'
+  };
+
+  const categoryScoreHighStyle: React.CSSProperties = {
+    ...categoryScoreStyle,
+    background: '#ffebee',
+    color: '#d32f2f'
+  };
+
+  const categoryScoreMediumStyle: React.CSSProperties = {
+    ...categoryScoreStyle,
+    background: '#fff8e1',
+    color: '#f57c00'
+  };
+
+  const categoryScoreLowStyle: React.CSSProperties = {
+    ...categoryScoreStyle,
+    background: '#e8f5e8',
+    color: '#388e3c'
+  };
+
+  const categoryDetailsStyle: React.CSSProperties = {
+    padding: '12px 16px',
+    background: 'white',
+    borderTop: '1px solid #e9ecef'
+  };
+
+  const actionButtonsStyle: React.CSSProperties = {
+    padding: '20px',
+    display: 'flex',
+    gap: '12px'
+  };
+
+  const btnPrimaryStyle: React.CSSProperties = {
+    flex: 1,
+    padding: '12px 16px',
+    border: 'none',
+    borderRadius: '8px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    background: '#ff6b95',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px'
+  };
+
+  const btnSecondaryStyle: React.CSSProperties = {
+    ...btnPrimaryStyle,
+    background: '#f8f9fa',
+    color: '#495057',
+    border: '1px solid #dee2e6'
+  };
+
+  const errorStateStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 20px',
+    textAlign: 'center'
+  };
+
+  const errorIconStyle: React.CSSProperties = {
+    fontSize: '48px',
+    marginBottom: '16px',
+    opacity: 0.6
+  };
+
+  const retryButtonStyle: React.CSSProperties = {
+    background: '#667eea',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '12px 24px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background 0.2s'
+  };
+
+  return (
+    <div style={containerStyle}>
+      {/* Header */}
+      <header style={headerStyle}>
+        <div style={logoStyle}>
+          <span style={bananaIconStyle}>🍌</span>
+          <h1 style={titleStyle}>Going Bananas</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={toggleToolbar}
+            style={{
+              ...buttonStyle,
+              ...(toolbarActive ? buttonHoverStyle : {})
+            }}
+            title={toolbarActive ? 'Hide Block Selector' : 'Show Block Selector'}
+          >
+            <Edit3 size={16} />
+          </button>
+          <button
+            onClick={handleSettings}
+            style={buttonStyle}
+            title="Settings"
+          >
+            <Settings size={16} />
+          </button>
+        </div>
+      </header>
+
+      {/* Toolbar Status */}
+      {toolbarActive && (
+        <div style={{
+          padding: '12px 20px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.2)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '12px', fontWeight: '500', color: 'white' }}>
+              Block Selector Active
+            </span>
+            <span style={{
+              fontSize: '11px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              padding: '4px 8px',
+              borderRadius: '12px',
+              color: 'white'
+            }}>
+              {selectedBlocks.length > 0 ? `${selectedBlocks.length} blocks selected` : 'Ready to select'}
+            </span>
           </div>
-        )}
-      </div>
+          
+          {selectedBlocks.length > 0 && (
+            <div>
+              <div style={{
+                fontSize: '11px',
+                color: 'rgba(255, 255, 255, 0.9)',
+                marginBottom: '8px',
+                padding: '8px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                maxHeight: '40px',
+                overflowY: 'auto'
+              }}>
+                {selectedBlocks.length} content blocks selected ({selectedBlocks.reduce((total, block) => total + block.text.length, 0)} chars total)
+              </div>
+              <button
+                onClick={analyzeSelectedBlocks}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  color: '#ff6b95',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Analyze Selected Blocks
+              </button>
+            </div>
+          )}
+          
+          {selectedBlocks.length === 0 && (
+            <div style={{
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.8)',
+              textAlign: 'center',
+              padding: '8px'
+            }}>
+              💡 Click on content blocks on the page to select them for analysis
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Notification Toast */}
       {notification && (
-        <div className={`absolute top-20 left-4 right-4 z-50 p-3 rounded-lg shadow-lg transition-all duration-300 ${
-          notification.type === 'error' 
-            ? 'bg-red-100 border border-red-300 text-red-800' 
-            : notification.type === 'success'
-            ? 'bg-green-100 border border-green-300 text-green-800'
-            : 'bg-blue-100 border border-blue-300 text-blue-800'
-        }`}>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">
+        <div style={{
+          position: 'absolute',
+          top: '80px',
+          left: '20px',
+          right: '20px',
+          zIndex: 50,
+          padding: '12px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+          transition: 'all 0.3s ease',
+          background: notification.type === 'error' ? '#fee' : notification.type === 'success' ? '#e8f5e8' : '#e3f2fd',
+          border: notification.type === 'error' ? '1px solid #ffcdd2' : notification.type === 'success' ? '1px solid #c8e6c9' : '1px solid #bbdefb',
+          color: notification.type === 'error' ? '#c62828' : notification.type === 'success' ? '#2e7d32' : '#1565c0'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px' }}>
               {notification.type === 'error' && '⚠️ '}
               {notification.type === 'success' && '✅ '}
               {notification.type === 'info' && 'ℹ️ '}
+            </span>
+            <span style={{ flex: 1, fontSize: '12px', fontWeight: '500' }}>
               {notification.message}
             </span>
             <button
               onClick={() => setNotification(null)}
-              className="ml-2 text-gray-500 hover:text-gray-700"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '14px',
+                cursor: 'pointer',
+                opacity: 0.7
+              }}
             >
               ✕
             </button>
@@ -315,20 +702,40 @@ export const Popup: React.FC = () => {
         </div>
       )}
 
-      <p>{content}</p>
-      
+      {/* Terms Pages Found */}
       {termsPages && termsPages.found && (
-        <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200">
-          <h4 className="text-sm font-medium text-yellow-800 mb-1">Terms & Conditions Found:</h4>
-          <div className="space-y-1">
+        <div style={{
+          padding: '12px 20px',
+          background: '#fff3cd',
+          borderBottom: '1px solid #ffeaa7'
+        }}>
+          <h4 style={{
+            fontSize: '12px',
+            fontWeight: '600',
+            color: '#856404',
+            marginBottom: '8px',
+            margin: '0 0 8px 0'
+          }}>
+            Terms & Conditions Found:
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {termsPages.links.slice(0, 3).map((link, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <span className="text-xs">
+              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px' }}>
                   {link.type === 'current' ? '📍' : link.type === 'link' ? '🔗' : '💡'}
                 </span>
                 <button
                   onClick={() => handleTermsLinkClick(link.url, link.text)}
-                  className="text-xs text-blue-600 hover:text-blue-800 truncate text-left hover:underline"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#0066cc',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    textDecoration: 'underline',
+                    padding: 0
+                  }}
                   title={`Click to read: ${link.text}`}
                   disabled={loadingTermsContent === link.url}
                 >
@@ -342,9 +749,28 @@ export const Popup: React.FC = () => {
 
       {/* Selected Terms Content */}
       {selectedTermsContent && (
-        <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 max-h-32 overflow-y-auto">
-          <h4 className="text-sm font-medium text-blue-800 mb-1">Terms Content:</h4>
-          <div className="text-xs text-gray-700 leading-relaxed">
+        <div style={{
+          padding: '12px 20px',
+          background: '#e3f2fd',
+          borderBottom: '1px solid #bbdefb',
+          maxHeight: '120px',
+          overflowY: 'auto'
+        }}>
+          <h4 style={{
+            fontSize: '12px',
+            fontWeight: '600',
+            color: '#1565c0',
+            marginBottom: '8px',
+            margin: '0 0 8px 0'
+          }}>
+            Terms Content:
+          </h4>
+          <div style={{
+            fontSize: '11px',
+            color: '#333',
+            lineHeight: '1.4',
+            marginBottom: '8px'
+          }}>
             {selectedTermsContent.length > 500 
               ? selectedTermsContent.substring(0, 500) + '...' 
               : selectedTermsContent
@@ -352,89 +778,192 @@ export const Popup: React.FC = () => {
           </div>
           <button
             onClick={() => setSelectedTermsContent(null)}
-            className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#1565c0',
+              fontSize: '11px',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
           >
             ✕ Close
           </button>
         </div>
       )}
 
-      {/* Content */}
-      <div className="bg-white h-full overflow-y-auto">
+      {/* Main Content */}
+      <div style={mainContentStyle}>
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full p-6">
-            <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mb-4" />
-            <p className="text-gray-600">Analyzing terms and conditions...</p>
+          <div style={loadingStyle}>
+            <div style={spinnerStyle}></div>
+            <p style={{ color: '#666', margin: 0 }}>Analyzing terms and conditions...</p>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <div className="text-4xl mb-4">⚠️</div>
-            <h3 className="font-semibold text-gray-800 mb-2">Analysis Failed</h3>
-            <p className="text-sm text-gray-600 mb-4">{error}</p>
+          <div style={errorStateStyle}>
+            <div style={errorIconStyle}>⚠️</div>
+            <h3 style={{ marginBottom: '8px', color: '#d32f2f', margin: '0 0 8px 0' }}>Analysis Failed</h3>
+            <p style={{ color: '#777', marginBottom: '24px', lineHeight: '1.5', margin: '0 0 24px 0' }}>
+              {error}
+            </p>
             <button
               onClick={analyzeCurrentPage}
-              className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+              style={retryButtonStyle}
             >
               Try Again
             </button>
           </div>
         ) : !hasTerms ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <div className="text-4xl mb-4">📄</div>
-            <h3 className="font-semibold text-gray-800 mb-2">No Terms Found</h3>
-            <p className="text-sm text-gray-600 mb-4">
+          <div style={noTermsStyle}>
+            <div style={emptyIconStyle}>📄</div>
+            <h3 style={{ marginBottom: '8px', color: '#555', margin: '0 0 8px 0' }}>No Terms Found</h3>
+            <p style={{ color: '#777', marginBottom: '24px', margin: '0 0 24px 0' }}>
               We couldn't detect any terms and conditions on this page.
             </p>
             <button
               onClick={manualScan}
-              className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
+              style={scanButtonStyle}
             >
-              <Search className="w-4 h-4" />
+              <Search size={16} />
               Scan Manually
             </button>
           </div>
         ) : analysis ? (
-          <div className="p-4 space-y-4">
-            <RiskScore
-              score={analysis.risk_score}
-              level={analysis.risk_level}
-              description={analysis.summary}
-            />
+          <div style={resultsStyle}>
+            {/* Risk Score Header */}
+            <div style={riskHeaderStyle}>
+              <div style={riskScoreStyle}>
+                <div style={scoreCircleStyle}>
+                  <span style={scoreNumberStyle}>{analysis.risk_score?.toFixed(1) || 'N/A'}</span>
+                </div>
+                <div>
+                  <h2 style={riskLevelStyle}>
+                    {analysis.risk_level ? analysis.risk_level.charAt(0).toUpperCase() + analysis.risk_level.slice(1) + ' Risk' : 'Unknown Risk'}
+                  </h2>
+                  <p style={riskDescriptionStyle}>
+                    {analysis.summary || 'Analysis completed'}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">Quick Summary</h3>
+            {/* Summary Section */}
+            <div style={sectionStyle}>
+              <h3 style={sectionTitleStyle}>Quick Summary</h3>
               <p 
-                className="text-sm text-gray-600 leading-relaxed"
+                style={summaryTextStyle}
                 dangerouslySetInnerHTML={{ __html: renderMarkdownText(analysis.summary) }}
               />
             </div>
 
-            <KeyPoints points={analysis.key_points} />
+            {/* Key Points */}
+            <div style={sectionStyle}>
+              <h3 style={sectionTitleStyle}>Key Concerns</h3>
+              <ul style={keyPointsListStyle}>
+                {analysis.key_points?.map((point, index) => (
+                  <li key={index} style={
+                    index % 3 === 0 ? keyPointHighStyle : 
+                    index % 3 === 1 ? keyPointMediumStyle : 
+                    keyPointLowStyle
+                  }>
+                    <span style={pointIconStyle}>
+                      {index % 3 === 0 ? '🔴' : index % 3 === 1 ? '🟡' : '🟢'}
+                    </span>
+                    <span style={pointTextStyle}>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-            <div className="flex gap-2 pt-2">
+            {/* Categories Breakdown */}
+            {analysis.categories && (
+              <div style={sectionStyle}>
+                <h3 style={sectionTitleStyle}>Detailed Analysis</h3>
+                {Object.entries(analysis.categories).map(([category, data]: [string, any]) => (
+                  <div key={category} style={categoryItemStyle}>
+                    <div style={categoryHeaderStyle}>
+                      <span style={categoryIconStyle}>
+                        {category === 'privacy' ? '🔒' : category === 'liability' ? '⚖️' : category === 'termination' ? '🚪' : '💳'}
+                      </span>
+                      <span style={categoryNameStyle}>
+                        {category.charAt(0).toUpperCase() + category.slice(1)}
+                      </span>
+                      <span style={
+                        data.score >= 7 ? categoryScoreHighStyle : 
+                        data.score >= 4 ? categoryScoreMediumStyle : 
+                        categoryScoreLowStyle
+                      }>
+                        {data.score?.toFixed(1) || 'N/A'}
+                      </span>
+                    </div>
+                    <div style={categoryDetailsStyle}>
+                      <p style={{ color: '#666', fontSize: '13px', lineHeight: '1.4', margin: 0 }}>
+                        {data.concerns?.join(', ') || 'No specific concerns identified'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={actionButtonsStyle}>
               <button
                 onClick={handleShare}
-                className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm"
+                style={btnSecondaryStyle}
               >
-                <Share className="w-4 h-4" />
-                Share
+                <Share size={16} />
+                Share Results
               </button>
               <button
                 onClick={() => chrome.tabs.create({ url: '/options/options.html' })}
-                className="flex-1 px-3 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm"
+                style={btnPrimaryStyle}
               >
-                View Details
+                View Full Analysis
               </button>
             </div>
 
             {analysis.mock && (
-              <div className="text-xs text-gray-400 text-center">
+              <div style={{
+                textAlign: 'center',
+                fontSize: '11px',
+                color: '#999',
+                padding: '8px',
+                background: '#f8f9fa',
+                borderTop: '1px solid #e9ecef'
+              }}>
                 ⚠️ Mock analysis for testing
               </div>
             )}
           </div>
         ) : null}
       </div>
+
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          
+          ::-webkit-scrollbar {
+            width: 6px;
+          }
+          
+          ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+          }
+          
+          ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+          }
+          
+          ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+          }
+        `}
+      </style>
     </div>
   );
 };

@@ -68,6 +68,10 @@ module.exports = (env, argv) => {
             from: 'src/assets',
             to: 'assets',
             noErrorOnMissing: true
+          },
+          {
+            from: 'src/content/content.css',
+            to: 'content/content.css'
           }
         ]
       }),
