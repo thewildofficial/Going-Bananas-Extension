@@ -17,16 +17,26 @@ const rateLimitMiddleware = require('./middleware/rateLimit');
 const analyzeRoutes = require('./routes/analyze');
 const healthRoutes = require('./routes/health');
 const personalizationRoutes = require('./routes/personalization');
+const supabaseAuthRoutes = require('./routes/supabaseAuth');
 const WebSocketService = require('./services/webSocketService');
+const SupabaseService = require('./services/supabaseService');
 
 class Server {
   constructor() {
     this.app = express();
     this.port = process.env.PORT || 3000;
     this.webSocketService = null;
+    this.supabaseService = null;
+    this.setupServices();
     this.setupMiddleware();
     this.setupRoutes();
     this.setupErrorHandling();
+  }
+
+  setupServices() {
+    // Initialize Supabase service
+    this.supabaseService = new SupabaseService();
+    this.app.locals.supabaseService = this.supabaseService;
   }
 
   setupMiddleware() {
@@ -80,6 +90,9 @@ class Server {
     // Personalization routes
     this.app.use('/api/personalization', personalizationRoutes);
 
+    // Supabase authentication routes
+    this.app.use('/api/supabase-auth', supabaseAuthRoutes);
+
     // Root route
     this.app.get('/', (req, res) => {
       res.json({
@@ -90,6 +103,7 @@ class Server {
           health: '/api/health',
           analyze: '/api/analyze',
           personalization: '/api/personalization',
+          supabaseAuth: '/api/supabase-auth',
           websocket: 'ws://localhost:3000/ws'
         },
         documentation: 'https://github.com/goingbananas/extension/blob/main/docs/API.md'
@@ -104,7 +118,9 @@ class Server {
         available_endpoints: [
           'GET /api/health',
           'POST /api/analyze',
-          'GET|POST|PATCH|DELETE /api/personalization'
+          'GET|POST|PATCH|DELETE /api/personalization',
+          'POST /api/supabase-auth/verify',
+          'GET|POST|PUT|DELETE /api/supabase-auth/user'
         ]
       });
     });
