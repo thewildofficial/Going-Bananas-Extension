@@ -1,73 +1,155 @@
 import React, { useEffect, useState } from 'react';
-import { useAnalysis } from '@/hooks/useAnalysis';
 import { Settings, RefreshCw, Search, Share, Edit3 } from 'lucide-react';
 import { getApiUrl } from '@/utils/config';
 import { renderMarkdownText } from '@/utils/markdown';
 
 export const Popup: React.FC = () => {
-  const { loading, analysis, error, hasTerms, analyzeCurrentPage, manualScan } = useAnalysis();
-  const [content, setContent] = useState('Loading...');
-  const [termsPages, setTermsPages] = useState<{ found: boolean; links: Array<{ text: string; url: string; type: string }> } | null>(null);
-  const [selectedTermsContent, setSelectedTermsContent] = useState<string | null>(null);
-  const [loadingTermsContent, setLoadingTermsContent] = useState<string | null>(null);
+  const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null);
+  const [pageStatus, setPageStatus] = useState<'loading' | 'analyzing' | 'complete' | 'error' | 'no-terms'>('loading');
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const [toolbarActive, setToolbarActive] = useState(false);
   const [selectedBlocks, setSelectedBlocks] = useState<Array<{id: string, text: string, element: string}>>([]);
   const [notification, setNotification] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
+  const [cachedAnalysis, setCachedAnalysis] = useState<boolean>(false);
 
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "readPageContent" }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.log('Content script not available:', chrome.runtime.lastError.message);
-            setContent("Content script not available. Try refreshing the page.");
-            return;
-          }
-          if (response && response.content) {
-            setContent(response.content);
-          } else {
-            setContent("Couldn't read terms & conditions.");
-          }
-        });
-
-        chrome.tabs.sendMessage(tabs[0].id, { action: "findTermsPages" }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.log('Content script not available for terms detection:', chrome.runtime.lastError.message);
-            return;
-          }
-          if (response && response.termsPages) {
-            setTermsPages(response.termsPages);
-          }
-        });
-      } else {
-        setContent('Unable to access tab.');
-      }
-    });
+    initializePopup();
   }, []);
 
-  const handleTermsLinkClick = async (url: string, linkText: string) => {
-    setLoadingTermsContent(url);
-    setSelectedTermsContent(null);
-
+  const initializePopup = async () => {
     try {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { 
-            action: "fetchTermsContent", 
-            url: url 
-          }, (response) => {
-            setLoadingTermsContent(null);
-            if (response && response.content) {
-              setSelectedTermsContent(response.content.content || 'No content found');
-            } else {
-              setSelectedTermsContent(`Failed to load content from: ${linkText}`);
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tabs[0]?.id) {
+        setPageStatus('error');
+        setError('Unable to access current tab');
+        return;
+      }
+
+      setCurrentTab(tabs[0]);
+      const tabUrl = tabs[0].url || '';
+      
+      // Check cache first
+      const cacheKey = `analysis_${hashUrl(tabUrl)}`;
+      const cached = await chrome.storage.local.get(cacheKey);
+      const cachedData = cached[cacheKey];
+      
+      if (cachedData && Date.now() - cachedData.timestamp < 24 * 60 * 60 * 1000) {
+        console.log('📦 Using cached analysis for:', tabUrl);
+        setAnalysis(cachedData.data);
+        setCachedAnalysis(true);
+        setPageStatus('complete');
+        return;
+      }
+
+      // Check if page has terms content
+      setPageStatus('analyzing');
+      
+      try {
+        const response = await chrome.runtime.sendMessage({
+          action: 'analyzeTerms',
+          data: { tabId: tabs[0].id }
+        });
+
+        if (response.success && response.analysis) {
+          setAnalysis(response.analysis);
+          setPageStatus('complete');
+          
+          // Cache the result
+          await chrome.storage.local.set({
+            [cacheKey]: {
+              data: response.analysis,
+              timestamp: Date.now(),
+              url: tabUrl
             }
           });
+        } else {
+          setPageStatus('no-terms');
+          setError(response.error || 'No terms and conditions detected');
         }
+      } catch (err) {
+        setPageStatus('error');
+        setError(err instanceof Error ? err.message : 'Analysis failed');
+      }
+    } catch (err) {
+      setPageStatus('error');
+      setError('Failed to initialize popup');
+    }
+  };
+
+  const hashUrl = (url: string): string => {
+    let hash = 0;
+    for (let i = 0; i < url.length; i++) {
+      const char = url.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString();
+  };
+
+  const refreshAnalysis = async () => {
+    if (!currentTab?.id) return;
+    
+    setPageStatus('analyzing');
+    setCachedAnalysis(false);
+    
+    // Clear cache for this URL
+    const tabUrl = currentTab.url || '';
+    const cacheKey = `analysis_${hashUrl(tabUrl)}`;
+    await chrome.storage.local.remove(cacheKey);
+    
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'analyzeTerms',
+        data: { tabId: currentTab.id }
       });
-    } catch (error) {
-      setLoadingTermsContent(null);
-      setSelectedTermsContent(`Error loading content: ${error}`);
+
+      if (response.success && response.analysis) {
+        setAnalysis(response.analysis);
+        setPageStatus('complete');
+        
+        // Cache the new result
+        await chrome.storage.local.set({
+          [cacheKey]: {
+            data: response.analysis,
+            timestamp: Date.now(),
+            url: tabUrl
+          }
+        });
+        
+        showNotification('success', 'Analysis refreshed successfully!');
+      } else {
+        setPageStatus('no-terms');
+        setError(response.error || 'No terms and conditions detected');
+      }
+    } catch (err) {
+      setPageStatus('error');
+      setError(err instanceof Error ? err.message : 'Analysis failed');
+    }
+  };
+
+  const manualScan = async () => {
+    if (!currentTab?.id) return;
+    
+    setPageStatus('analyzing');
+    
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'manualScan',
+        data: { tabId: currentTab.id }
+      });
+
+      if (response.success && response.analysis) {
+        setAnalysis(response.analysis);
+        setPageStatus('complete');
+        showNotification('success', 'Manual scan completed!');
+      } else {
+        setPageStatus('no-terms');
+        setError(response.error || 'No terms found in manual scan');
+      }
+    } catch (err) {
+      setPageStatus('error');
+      setError(err instanceof Error ? err.message : 'Manual scan failed');
     }
   };
 
@@ -617,6 +699,15 @@ export const Popup: React.FC = () => {
           <h1 style={titleStyle}>Going Bananas</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {pageStatus === 'complete' && (
+            <button
+              onClick={refreshAnalysis}
+              style={buttonStyle}
+              title={cachedAnalysis ? 'Refresh cached analysis' : 'Refresh analysis'}
+            >
+              <RefreshCw size={16} />
+            </button>
+          )}
           <button
             onClick={toggleToolbar}
             style={{
@@ -804,133 +895,61 @@ export const Popup: React.FC = () => {
         </div>
       )}
 
-      {/* Terms Pages Found */}
-      {termsPages && termsPages.found && (
-        <div style={{
-          padding: '12px 20px',
-          background: '#fff3cd',
-          borderBottom: '1px solid #ffeaa7'
-        }}>
-          <h4 style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#856404',
-            marginBottom: '8px',
-            margin: '0 0 8px 0'
-          }}>
-            Terms & Conditions Found:
-          </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {termsPages.links.slice(0, 3).map((link, index) => (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px' }}>
-                  {link.type === 'current' ? '📍' : link.type === 'link' ? '🔗' : '💡'}
-                </span>
-                <button
-                  onClick={() => handleTermsLinkClick(link.url, link.text)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#0066cc',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    textDecoration: 'underline',
-                    padding: 0
-                  }}
-                  title={`Click to read: ${link.text}`}
-                  disabled={loadingTermsContent === link.url}
-                >
-                  {loadingTermsContent === link.url ? '⏳ Loading...' : link.text}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Selected Terms Content */}
-      {selectedTermsContent && (
-        <div style={{
-          padding: '12px 20px',
-          background: '#e3f2fd',
-          borderBottom: '1px solid #bbdefb',
-          maxHeight: '120px',
-          overflowY: 'auto'
-        }}>
-          <h4 style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#1565c0',
-            marginBottom: '8px',
-            margin: '0 0 8px 0'
-          }}>
-            Terms Content:
-          </h4>
-          <div style={{
-            fontSize: '11px',
-            color: '#333',
-            lineHeight: '1.4',
-            marginBottom: '8px'
-          }}>
-            {selectedTermsContent.length > 500 
-              ? selectedTermsContent.substring(0, 500) + '...' 
-              : selectedTermsContent
-            }
-          </div>
-          <button
-            onClick={() => setSelectedTermsContent(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#1565c0',
-              fontSize: '11px',
-              cursor: 'pointer',
-              textDecoration: 'underline'
-            }}
-          >
-            ✕ Close
-          </button>
-        </div>
-      )}
 
       {/* Main Content */}
       <div style={mainContentStyle}>
-        {loading ? (
+        {pageStatus === 'loading' && (
           <div style={loadingStyle}>
             <div style={spinnerStyle}></div>
-            <p style={{ color: '#666', margin: 0 }}>Analyzing terms and conditions...</p>
+            <p style={{ color: '#666', margin: 0, textAlign: 'center' }}>Connecting to page...</p>
           </div>
-        ) : error ? (
+        )}
+
+        {pageStatus === 'analyzing' && (
+          <div style={loadingStyle}>
+            <div style={spinnerStyle}></div>
+            <p style={{ color: '#666', margin: 0, textAlign: 'center' }}>🔍 Analyzing page content...</p>
+            <p style={{ color: '#999', margin: '8px 0 0 0', fontSize: '12px', textAlign: 'center' }}>
+              This may take a moment
+            </p>
+          </div>
+        )}
+
+        {pageStatus === 'error' && (
           <div style={errorStateStyle}>
             <div style={errorIconStyle}>⚠️</div>
-            <h3 style={{ marginBottom: '8px', color: '#d32f2f', margin: '0 0 8px 0' }}>Analysis Failed</h3>
+            <h3 style={{ marginBottom: '8px', color: '#d32f2f', margin: '0 0 8px 0' }}>Unable to Analyze</h3>
             <p style={{ color: '#777', marginBottom: '24px', lineHeight: '1.5', margin: '0 0 24px 0' }}>
               {error}
             </p>
-            <button
-              onClick={analyzeCurrentPage}
-              style={retryButtonStyle}
-            >
-              Try Again
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={refreshAnalysis} style={retryButtonStyle}>
+                <RefreshCw size={16} />
+                Retry
+              </button>
+              <button onClick={manualScan} style={scanButtonStyle}>
+                <Search size={16} />
+                Manual Scan
+              </button>
+            </div>
           </div>
-        ) : !hasTerms ? (
+        )}
+
+        {pageStatus === 'no-terms' && (
           <div style={noTermsStyle}>
             <div style={emptyIconStyle}>📄</div>
-            <h3 style={{ marginBottom: '8px', color: '#555', margin: '0 0 8px 0' }}>No Terms Found</h3>
+            <h3 style={{ marginBottom: '8px', color: '#555', margin: '0 0 8px 0' }}>No Terms Detected</h3>
             <p style={{ color: '#777', marginBottom: '24px', margin: '0 0 24px 0' }}>
-              We couldn't detect any terms and conditions on this page.
+              This page doesn't appear to contain terms and conditions.
             </p>
-            <button
-              onClick={manualScan}
-              style={scanButtonStyle}
-            >
+            <button onClick={manualScan} style={scanButtonStyle}>
               <Search size={16} />
-              Scan Manually
+              Force Scan
             </button>
           </div>
-        ) : analysis ? (
+        )}
+
+        {pageStatus === 'complete' && analysis && (
           <div style={resultsStyle}>
             {/* Risk Score Header */}
             <div style={riskHeaderStyle}>
@@ -962,7 +981,7 @@ export const Popup: React.FC = () => {
             <div style={sectionStyle}>
               <h3 style={sectionTitleStyle}>Key Concerns</h3>
               <ul style={keyPointsListStyle}>
-                {analysis.key_points?.map((point, index) => (
+                {analysis.key_points?.map((point: string, index: number) => (
                   <li key={index} style={
                     index % 3 === 0 ? keyPointHighStyle : 
                     index % 3 === 1 ? keyPointMediumStyle : 
@@ -1080,20 +1099,71 @@ export const Popup: React.FC = () => {
               </button>
             </div>
 
-            {analysis.mock && (
-              <div style={{
-                textAlign: 'center',
-                fontSize: '11px',
-                color: '#999',
-                padding: '8px',
-                background: '#f8f9fa',
-                borderTop: '1px solid #e9ecef'
-              }}>
-                ⚠️ Mock analysis for testing
+            {/* Cache and Mock Indicators */}
+            <div style={{
+              padding: '12px 16px',
+              background: '#f8f9fa',
+              borderTop: '1px solid #e9ecef',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {cachedAnalysis && (
+                  <span style={{
+                    fontSize: '11px',
+                    color: '#28a745',
+                    background: '#d4edda',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid #c3e6cb'
+                  }}>
+                    📦 Cached
+                  </span>
+                )}
+                {analysis.mock && (
+                  <span style={{
+                    fontSize: '11px',
+                    color: '#856404',
+                    background: '#fff3cd',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid #ffeaa7'
+                  }}>
+                    🔧 Demo Mode
+                  </span>
+                )}
               </div>
-            )}
+              <button
+                onClick={refreshAnalysis}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6c757d',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#e9ecef';
+                  e.currentTarget.style.color = '#495057';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'none';
+                  e.currentTarget.style.color = '#6c757d';
+                }}
+              >
+                <RefreshCw size={12} />
+                Refresh
+              </button>
+            </div>
           </div>
-        ) : null}
+        )}
       </div>
 
       <style>
