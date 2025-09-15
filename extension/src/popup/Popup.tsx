@@ -446,8 +446,14 @@ export const Popup: React.FC = () => {
     padding: '0 0 20px 0'
   };
 
+  const getRiskColor = (score: number) => {
+    if (score >= 7) return { bg: '#ff6b95', accent: '#ff4d7d', icon: '🚨', emoji: '⚠️' };
+    if (score >= 5) return { bg: '#ff9a56', accent: '#ff8533', icon: '⚠️', emoji: '🔶' };
+    return { bg: '#4ecdc4', accent: '#26d0ce', icon: '✅', emoji: '🛡️' };
+  };
+
   const riskHeaderStyle: React.CSSProperties = {
-    padding: '16px',
+    padding: '20px 16px',
     background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
     color: 'white',
     borderRadius: 0,
@@ -460,28 +466,50 @@ export const Popup: React.FC = () => {
   const riskScoreStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: '16px'
   };
 
-  const scoreCircleStyle: React.CSSProperties = {
-    width: '70px',
-    height: '70px',
-    borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.15)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '3px solid rgba(255, 255, 255, 0.3)',
-    backdropFilter: 'blur(10px)',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-    position: 'relative',
-    zIndex: 2
+  const riskIndicatorStyle = (score: number): React.CSSProperties => {
+    const colors = getRiskColor(score);
+    return {
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '80px',
+      height: '80px',
+      background: `linear-gradient(135deg, ${colors.bg} 0%, ${colors.accent} 100%)`,
+      borderRadius: '16px',
+      boxShadow: `0 4px 16px rgba(0, 0, 0, 0.15)`,
+      flexShrink: 0,
+      border: '3px solid rgba(255, 255, 255, 0.4)'
+    };
   };
 
   const scoreNumberStyle: React.CSSProperties = {
-    fontSize: '24px',
+    fontSize: '26px',
     fontWeight: '800',
     textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
+  };
+
+  const riskBadgeStyle = (score: number): React.CSSProperties => {
+    const colors = getRiskColor(score);
+    return {
+      position: 'absolute',
+      top: '-8px',
+      right: '-8px',
+      width: '28px',
+      height: '28px',
+      background: colors.bg,
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '14px',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+      border: '2px solid white'
+    };
   };
 
   const riskLevelStyle: React.CSSProperties = {
@@ -954,14 +982,32 @@ export const Popup: React.FC = () => {
             {/* Risk Score Header */}
             <div style={riskHeaderStyle}>
               <div style={riskScoreStyle}>
-                <div style={scoreCircleStyle}>
-                  <span style={scoreNumberStyle}>{analysis.risk_score?.toFixed(1) || 'N/A'}</span>
+                <div style={{ position: 'relative' }}>
+                  <div style={riskIndicatorStyle(analysis.risk_score || 0)}>
+                    <span style={scoreNumberStyle}>{analysis.risk_score?.toFixed(1) || 'N/A'}</span>
+                    <div style={riskBadgeStyle(analysis.risk_score || 0)}>
+                      {getRiskColor(analysis.risk_score || 0).icon}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h2 style={riskLevelStyle}>
-                    {analysis.risk_level ? analysis.risk_level.charAt(0).toUpperCase() + analysis.risk_level.slice(1) + ' Risk' : 'Unknown Risk'}
-                  </h2>
-                  <p style={riskDescriptionStyle}>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '24px' }}>{getRiskColor(analysis.risk_score || 0).emoji}</span>
+                    <h2 style={{
+                      ...riskLevelStyle,
+                      fontSize: '20px',
+                      fontWeight: '700',
+                      textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
+                    }}>
+                      {analysis.risk_level ? analysis.risk_level.charAt(0).toUpperCase() + analysis.risk_level.slice(1) + ' Risk' : 'Unknown Risk'}
+                    </h2>
+                  </div>
+                  <p style={{
+                    ...riskDescriptionStyle,
+                    fontSize: '13px',
+                    opacity: 0.9,
+                    lineHeight: '1.4'
+                  }}>
                     {analysis.summary || 'Analysis completed'}
                   </p>
                 </div>
@@ -1068,7 +1114,17 @@ export const Popup: React.FC = () => {
                 Share
               </button>
               <button
-                onClick={() => chrome.tabs.create({ url: '/options/options.html' })}
+                onClick={() => {
+                  // Create a detailed analysis page with analysis data
+                  const analysisData = encodeURIComponent(JSON.stringify({
+                    url: currentTab?.url || 'Unknown',
+                    analysis: analysis,
+                    timestamp: new Date().toISOString()
+                  }));
+                  chrome.tabs.create({ 
+                    url: `chrome-extension://${chrome.runtime.id}/options/options.html#analysis=${analysisData}`
+                  });
+                }}
                 style={{
                   flex: 2,
                   padding: '12px 16px',

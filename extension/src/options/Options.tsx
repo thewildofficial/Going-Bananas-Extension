@@ -9,9 +9,22 @@ export const Options: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [analysisData, setAnalysisData] = useState<any>(null);
 
   useEffect(() => {
     loadSettings();
+    // Check for analysis data in URL hash
+    const hash = window.location.hash;
+    if (hash.startsWith('#analysis=')) {
+      try {
+        const encodedData = hash.substring('#analysis='.length);
+        const decodedData = JSON.parse(decodeURIComponent(encodedData));
+        setAnalysisData(decodedData);
+        setActiveTab('analysis');
+      } catch (error) {
+        console.error('Failed to parse analysis data:', error);
+      }
+    }
   }, []);
 
   const loadSettings = async () => {
@@ -633,8 +646,159 @@ export const Options: React.FC = () => {
       {/* Analysis Settings Tab */}
       {activeTab === 'analysis' && (
         <div style={tabContentActiveStyle}>
-          <section style={settingsSectionStyle}>
-            <h2 style={sectionTitleStyle}>Analysis Configuration</h2>
+          {analysisData ? (
+            <section style={settingsSectionStyle}>
+              <h2 style={sectionTitleStyle}>Full Analysis Report</h2>
+              
+              <div style={{
+                background: 'white',
+                border: '1px solid #e1e5e9',
+                borderRadius: '8px',
+                padding: '24px',
+                marginBottom: '24px',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '20px',
+                  paddingBottom: '20px',
+                  borderBottom: '1px solid #f0f0f0'
+                }}>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '12px',
+                    background: analysisData.analysis.risk_score >= 7 ? '#ff4757' : 
+                               analysisData.analysis.risk_score >= 5 ? '#ffa502' : '#2ed573',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '24px',
+                    fontWeight: '900'
+                  }}>
+                    {analysisData.analysis.risk_score?.toFixed(1) || 'N/A'}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px 0', fontSize: '20px', color: '#2c3e50' }}>
+                      {analysisData.analysis.risk_level ? 
+                        analysisData.analysis.risk_level.charAt(0).toUpperCase() + 
+                        analysisData.analysis.risk_level.slice(1) + ' Risk' : 
+                        'Unknown Risk'
+                      }
+                    </h3>
+                    <p style={{ margin: 0, color: '#7f8c8d', fontSize: '14px' }}>
+                      Analyzed: {new Date(analysisData.timestamp).toLocaleString()}
+                    </p>
+                    <p style={{ margin: '4px 0 0 0', color: '#95a5a6', fontSize: '12px' }}>
+                      URL: {analysisData.url}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Summary */}
+                {analysisData.analysis.summary && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <h4 style={{ color: '#2c3e50', marginBottom: '12px' }}>Summary</h4>
+                    <p style={{ color: '#34495e', lineHeight: '1.6' }}>
+                      {analysisData.analysis.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Key Points */}
+                {analysisData.analysis.key_points && analysisData.analysis.key_points.length > 0 && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <h4 style={{ color: '#2c3e50', marginBottom: '12px' }}>Key Concerns</h4>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {analysisData.analysis.key_points.map((point: string, index: number) => (
+                        <li key={index} style={{ 
+                          color: '#34495e', 
+                          lineHeight: '1.6', 
+                          marginBottom: '8px' 
+                        }}>
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Categories */}
+                {analysisData.analysis.categories && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <h4 style={{ color: '#2c3e50', marginBottom: '12px' }}>Detailed Analysis</h4>
+                    {Object.entries(analysisData.analysis.categories).map(([category, data]: [string, any]) => (
+                      <div key={category} style={{
+                        border: '1px solid #ecf0f1',
+                        borderRadius: '6px',
+                        padding: '16px',
+                        marginBottom: '12px',
+                        background: '#fafbfc'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px'
+                        }}>
+                          <h5 style={{
+                            margin: 0,
+                            color: '#2c3e50',
+                            textTransform: 'capitalize'
+                          }}>
+                            {category}
+                          </h5>
+                          <span style={{
+                            background: data.score >= 7 ? '#ff4757' : 
+                                       data.score >= 4 ? '#ffa502' : '#2ed573',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '600'
+                          }}>
+                            {data.score?.toFixed(1) || 'N/A'}
+                          </span>
+                        </div>
+                        <p style={{
+                          margin: 0,
+                          color: '#7f8c8d',
+                          fontSize: '14px',
+                          lineHeight: '1.5'
+                        }}>
+                          {data.concerns?.join(', ') || 'No specific concerns identified'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    setAnalysisData(null);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                  }}
+                  style={{
+                    background: '#3498db',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 24px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  ← Back to Settings
+                </button>
+              </div>
+            </section>
+          ) : (
+            <section style={settingsSectionStyle}>
+              <h2 style={sectionTitleStyle}>Analysis Configuration</h2>
             
             <div style={settingItemStyle}>
               <div style={settingInfoStyle}>
@@ -688,6 +852,7 @@ export const Options: React.FC = () => {
               </div>
             </div>
           </section>
+          )}
 
           {/* Analysis Categories */}
           <section style={settingsSectionStyle}>
