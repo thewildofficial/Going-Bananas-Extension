@@ -908,6 +908,7 @@ export const Options: React.FC = () => {
           
           input[type="checkbox"]:checked + label {
             background: #ff6b95;
+            color: white;
           }
           
           input[type="checkbox"]:checked + label::after {

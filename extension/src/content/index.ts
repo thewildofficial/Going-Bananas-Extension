@@ -311,6 +311,7 @@ class TermsAnalyzer {
           backdrop-filter: blur(10px);
           border: 1px solid rgba(255,255,255,0.2);
         }
+        body.going-bananas-block-selector-active .going-bananas-notification { top: 80px; }
         .going-bananas-loading-notification {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
@@ -359,6 +360,7 @@ class TermsAnalyzer {
           cursor: pointer;
           transition: all 0.3s ease;
         }
+        body.going-bananas-block-selector-active .going-bananas-result-notification { top: 80px; }
         .going-bananas-result-header {
           margin-bottom: 12px;
         }
@@ -1397,6 +1399,8 @@ class TermsAnalyzer {
       });
     }
     
+    // Flag body to adjust in-page widget positions
+    document.body.classList.add('going-bananas-block-selector-active');
     // Adjust page content to account for toolbar
     document.body.style.paddingTop = '60px';
   }
@@ -1407,7 +1411,8 @@ class TermsAnalyzer {
       this.blockSelectorToolbar = null;
     }
     
-    // Reset page padding
+    // Reset page padding and body flag
+    document.body.classList.remove('going-bananas-block-selector-active');
     document.body.style.paddingTop = '';
   }
 
