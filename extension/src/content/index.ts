@@ -9,6 +9,24 @@ class TermsAnalyzer {
   public tooltipEl: HTMLElement | null = null;
   public firstRunGuideShown = false;
 
+  // Block selection properties
+  private blockSelectorActive = false;
+  private selectedBlocks: Array<{
+    id: string, 
+    text: string, 
+    element: string,
+    domElement: HTMLElement,
+    originalStyles: {
+      border: string,
+      backgroundColor: string
+    }
+  }> = [];
+  private selectableElements: HTMLElement[] = [];
+  private blockSelectorToolbar: HTMLElement | null = null;
+  private lastSelectedBlockIndex: number = -1; // Track last selected block for range selection
+  private extensionCheckInterval: number | null = null;
+  private boundClickHandler: ((event: Event) => void) | null = null;
+
   constructor() {
     this.init();
   }
@@ -19,6 +37,25 @@ class TermsAnalyzer {
       return true;
     });
 
+    // Listen for extension context invalidation (popup closed)
+    chrome.runtime.onConnect.addListener((port) => {
+      port.onDisconnect.addListener(() => {
+        if (this.blockSelectorActive) {
+          console.log('🔌 Extension disconnected, cleaning up block selector');
+          this.hideBlockSelector();
+        }
+      });
+    });
+
+    // Listen for page visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.blockSelectorActive) {
+        console.log('👁️ Page became hidden, maintaining block selector state');
+        // Keep block selector active even when page is hidden
+      }
+    });
+
+    // Auto-detect terms when page loads
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => this.autoDetectTerms());
     } else {
@@ -31,6 +68,62 @@ class TermsAnalyzer {
   private async handleMessage(message: any, sender: any, sendResponse: any): Promise<void> {
     try {
       switch (message.action) {
+        case 'analyzeTerms': {
+          const text = document.body.innerText || '';
+          const url = window.location.href;
+          try {
+            const bgResponse = await chrome.runtime.sendMessage({
+              action: 'analyzeTermsText',
+              data: { text, url, timestamp: Date.now() }
+            });
+
+            if (bgResponse && bgResponse.success) {
+              sendResponse({ success: true, analysis: bgResponse.analysis || bgResponse });
+            } else {
+              sendResponse({ success: false, error: bgResponse?.error || 'Analysis failed' });
+            }
+          } catch (err) {
+            sendResponse({ success: false, error: err instanceof Error ? err.message : 'Analysis request failed' });
+          }
+          break;
+        }
+
+        case 'manualScan': {
+          const text = document.body.innerText || '';
+          const url = window.location.href;
+          try {
+            const bgResponse = await chrome.runtime.sendMessage({
+              action: 'analyzeTermsText',
+              data: { text, url, timestamp: Date.now() }
+            });
+
+            if (bgResponse && bgResponse.success) {
+              sendResponse({ success: true, analysis: bgResponse.analysis || bgResponse });
+            } else {
+              sendResponse({ success: false, error: bgResponse?.error || 'Manual scan failed' });
+            }
+          } catch (err) {
+            sendResponse({ success: false, error: err instanceof Error ? err.message : 'Manual scan request failed' });
+          }
+          break;
+        }
+
+        case 'autoAnalyze': {
+          // Fire-and-forget compatibility; trigger background flow as needed
+          const text = document.body.innerText || '';
+          const url = window.location.href;
+          try {
+            await chrome.runtime.sendMessage({
+              action: 'analyzeTermsText',
+              data: { text, url, timestamp: Date.now() }
+            });
+            sendResponse({ success: true });
+          } catch (err) {
+            sendResponse({ success: false, error: err instanceof Error ? err.message : 'Auto analysis failed' });
+          }
+          break;
+        }
+
         case "readPageContent":
           const pageContent = document.body.innerText;
           sendResponse({ content: pageContent });
@@ -63,6 +156,25 @@ class TermsAnalyzer {
           console.log('🎯 Received autoAnalyze message');
           await this.autoDetectTerms();
           sendResponse({ success: true, message: 'Auto-analysis triggered' });
+          break;
+
+        case 'showBlockSelector':
+          this.showBlockSelector();
+          sendResponse({ success: true, message: 'Block selector activated' });
+          break;
+
+        case 'hideBlockSelector':
+          this.hideBlockSelector();
+          sendResponse({ success: true, message: 'Block selector deactivated' });
+          break;
+
+        case 'showSelectedBlocksAnalysis':
+          if (message.data) {
+            this.showBlockAnalysisResult(message.data, message.selectedBlocks);
+            sendResponse({ success: true, message: 'Analysis result displayed' });
+          } else {
+            sendResponse({ success: false, error: 'No analysis data provided' });
+          }
           break;
 
         default:
@@ -255,6 +367,7 @@ class TermsAnalyzer {
           backdrop-filter: blur(10px);
           border: 1px solid rgba(255,255,255,0.2);
         }
+        body.going-bananas-block-selector-active .going-bananas-notification { top: 80px; }
         .going-bananas-loading-notification {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
@@ -303,6 +416,7 @@ class TermsAnalyzer {
           cursor: pointer;
           transition: all 0.3s ease;
         }
+        body.going-bananas-block-selector-active .going-bananas-result-notification { top: 80px; }
         .going-bananas-result-header {
           margin-bottom: 12px;
         }
@@ -394,6 +508,7 @@ class TermsAnalyzer {
   }
 
   private showAnalysisNotification(analysis: any): void {
+    console.log('🚀 Displaying analysis notification');
     this.hideExistingNotifications();
     
     const riskColor = this.getRiskColor(analysis.risk_level);
@@ -402,7 +517,28 @@ class TermsAnalyzer {
     const notification = document.createElement('div');
     notification.id = 'going-bananas-result';
     notification.className = 'going-bananas-result-notification';
-    notification.style.borderLeft = `4px solid ${riskColor}`;
+    
+    // Apply critical styles inline to ensure visibility
+    notification.style.cssText = `
+      position: fixed !important;
+      top: 20px !important;
+      right: 20px !important;
+      background: white !important;
+      color: #333 !important;
+      padding: 16px !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important;
+      z-index: 10001 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      font-size: 14px !important;
+      max-width: 300px !important;
+      cursor: pointer !important;
+      transition: all 0.3s ease !important;
+      border-left: 4px solid ${riskColor} !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    `;
     
     const categories = analysis.categories || {};
     const categoriesHtml = this.buildCategoriesDisplay(categories);
@@ -441,15 +577,53 @@ class TermsAnalyzer {
       }
     });
     
+    console.log('📋 About to append notification to document.body');
     document.body.appendChild(notification);
+    console.log('✅ Analysis popup displayed successfully');
     
+    // For analysis results, make the notification more prominent and persistent
+    // Auto-hide only after 20 seconds instead of 12, and only if not expanded
     setTimeout(() => {
       if (notification.parentNode && !isExpanded) {
+        console.log('🕒 Popup auto-hiding after 20 seconds, exiting block selection mode');
+        this.hideBlockSelector();
+        
         notification.style.opacity = '0';
         notification.style.transform = 'translateX(100%)';
         setTimeout(() => notification.remove(), 300);
       }
-    }, 12000);
+    }, 20000);
+    
+    // Add a close button for manual dismissal
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '×';
+    closeBtn.style.cssText = `
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.1);
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notification.style.opacity = '0';
+      notification.style.transform = 'translateX(100%)';
+      
+      // Exit block selection mode entirely when popup is manually closed
+      console.log('🧹 Popup closed manually, exiting block selection mode');
+      this.hideBlockSelector();
+      
+      setTimeout(() => notification.remove(), 300);
+    });
+    notification.appendChild(closeBtn);
   }
 
   private buildCategoriesDisplay(categories: any): string {
@@ -1152,6 +1326,804 @@ class TermsAnalyzer {
       analysis_time: Date.now(),
       mock: true
     };
+  }
+
+  // Block Selection Methods
+  private showBlockSelector(): void {
+    console.log('📝 Activating block selector mode');
+    this.blockSelectorActive = true;
+    this.createBlockSelectorToolbar();
+    this.identifySelectableBlocks();
+    this.attachBlockSelectionListeners();
+    this.startExtensionConnectionCheck();
+  }
+
+  private hideBlockSelector(): void {
+    console.log('📝 Deactivating block selector mode');
+    this.blockSelectorActive = false;
+    this.clearSelectedBlocks(); // This properly clears visual highlights
+    this.removeBlockSelectionListeners();
+    this.clearBlockHighlights(); // This clears hover highlights
+    this.aggressiveStyleCleanup(); // Fallback cleanup for any missed elements
+    this.removeBlockSelectorToolbar();
+    this.stopExtensionConnectionCheck();
+    
+    // Additional ultra-aggressive cleanup after a short delay to catch any lingering effects
+    setTimeout(() => {
+      this.ultraAggressiveCleanup();
+    }, 200);
+  }
+
+  private createBlockSelectorToolbar(): void {
+    if (this.blockSelectorToolbar) {
+      this.blockSelectorToolbar.remove();
+    }
+
+    this.blockSelectorToolbar = document.createElement('div');
+    this.blockSelectorToolbar.id = 'going-bananas-block-selector-toolbar';
+    this.blockSelectorToolbar.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 999999;
+        background: linear-gradient(135deg, #ff8a00, #e52e71);
+        color: white;
+        padding: 12px 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        border-bottom: 2px solid rgba(255,255,255,0.2);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      ">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="font-size: 18px;">🍌</span>
+          <span style="font-weight: 600;">Block Selector Mode</span>
+          <span id="block-count-display" style="
+            background: rgba(255,255,255,0.25);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+          ">0 blocks selected</span>
+          <span style="
+            font-size: 11px;
+            opacity: 0.8;
+            font-style: italic;
+          ">💡 Shift+click for range selection</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button id="clear-selection-btn" style="
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+          ">Clear All</button>
+          <button id="analyze-blocks-btn" style="
+            background: rgba(34, 197, 94, 0.9);
+            border: 1px solid rgba(34, 197, 94, 1);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0.5;
+            pointer-events: none;
+            transition: all 0.2s ease;
+          ">🔍 Analyze</button>
+          <button id="close-block-selector-btn" style="
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+          ">✕ Close</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(this.blockSelectorToolbar);
+    
+    // Add event listeners to toolbar buttons
+    const clearBtn = this.blockSelectorToolbar.querySelector('#clear-selection-btn');
+    const analyzeBtn = this.blockSelectorToolbar.querySelector('#analyze-blocks-btn');
+    const closeBtn = this.blockSelectorToolbar.querySelector('#close-block-selector-btn');
+    
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.clearSelectedBlocks());
+    }
+    
+    if (analyzeBtn) {
+      analyzeBtn.addEventListener('click', () => this.analyzeSelectedBlocksFromToolbar());
+    }
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.hideBlockSelector();
+        chrome.runtime.sendMessage({ action: 'toolbarClosed' });
+      });
+    }
+    
+    // Flag body to adjust in-page widget positions
+    document.body.classList.add('going-bananas-block-selector-active');
+    // Adjust page content to account for toolbar
+    document.body.style.paddingTop = '60px';
+  }
+
+  private removeBlockSelectorToolbar(): void {
+    if (this.blockSelectorToolbar) {
+      this.blockSelectorToolbar.remove();
+      this.blockSelectorToolbar = null;
+    }
+    
+    // Reset page padding and body flag
+    document.body.classList.remove('going-bananas-block-selector-active');
+    document.body.style.paddingTop = '';
+  }
+
+  private identifySelectableBlocks(): void {
+    // Clear previous selectable elements
+    this.selectableElements = [];
+    
+    // Define selectors for content blocks that are likely to contain meaningful text
+    const selectors = [
+      'p', 'div', 'section', 'article', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'td', 'th', 'span', 'a', 'strong', 'em', 'b', 'i'
+    ];
+    
+    selectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((element: Element) => {
+        const htmlElement = element as HTMLElement;
+        const text = htmlElement.innerText?.trim() || '';
+        
+        // Only include elements with substantial text content
+        if (text.length > 20 && 
+            !this.isDescendantOfToolbar(htmlElement) &&
+            this.isVisible(htmlElement) &&
+            !this.hasSelectableParent(htmlElement)) {
+          this.selectableElements.push(htmlElement);
+          this.addBlockHover(htmlElement);
+        }
+      });
+    });
+    
+    console.log(`🎯 Identified ${this.selectableElements.length} selectable blocks`);
+  }
+
+  private isDescendantOfToolbar(element: HTMLElement): boolean {
+    let parent = element.parentElement;
+    while (parent) {
+      if (parent.id === 'going-bananas-block-selector-toolbar' || 
+          parent.id?.startsWith('going-bananas-')) {
+        return true;
+      }
+      parent = parent.parentElement;
+    }
+    return false;
+  }
+
+  private isVisible(element: HTMLElement): boolean {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && 
+           style.visibility !== 'hidden' && 
+           style.opacity !== '0' &&
+           element.offsetWidth > 0 && 
+           element.offsetHeight > 0;
+  }
+
+  private hasSelectableParent(element: HTMLElement): boolean {
+    return this.selectableElements.some(parent => 
+      parent !== element && parent.contains(element)
+    );
+  }
+
+  private addBlockHover(element: HTMLElement): void {
+    const originalBorder = element.style.border;
+    const originalBackground = element.style.backgroundColor;
+    
+    const mouseEnterHandler = () => {
+      if (!this.isBlockSelected(element)) {
+        element.style.border = '2px dashed #ff8a00';
+        element.style.backgroundColor = 'rgba(255, 138, 0, 0.1)';
+        element.style.cursor = 'pointer';
+      }
+    };
+    
+    const mouseLeaveHandler = () => {
+      if (!this.isBlockSelected(element)) {
+        element.style.border = originalBorder;
+        element.style.backgroundColor = originalBackground;
+        element.style.cursor = 'default';
+      }
+    };
+    
+    element.addEventListener('mouseenter', mouseEnterHandler);
+    element.addEventListener('mouseleave', mouseLeaveHandler);
+    
+    // Store original styles and handlers for cleanup
+    (element as any).__blockSelectorData = {
+      originalBorder,
+      originalBackground,
+      mouseEnterHandler,
+      mouseLeaveHandler
+    };
+  }
+
+  private attachBlockSelectionListeners(): void {
+    // Create and store the bound handler
+    this.boundClickHandler = this.handleBlockClick.bind(this);
+    
+    this.selectableElements.forEach(element => {
+      if (this.boundClickHandler) {
+        element.addEventListener('click', this.boundClickHandler);
+      }
+    });
+  }
+
+  private removeBlockSelectionListeners(): void {
+    this.selectableElements.forEach(element => {
+      // Remove the click listener using the stored bound handler
+      if (this.boundClickHandler) {
+        element.removeEventListener('click', this.boundClickHandler);
+      }
+      
+      // Clean up hover listeners and data
+      const data = (element as any).__blockSelectorData;
+      if (data) {
+        element.removeEventListener('mouseenter', data.mouseEnterHandler);
+        element.removeEventListener('mouseleave', data.mouseLeaveHandler);
+        delete (element as any).__blockSelectorData;
+      }
+    });
+    
+    // Clear the bound handler
+    this.boundClickHandler = null;
+    
+    // Clear the selectable elements array
+    this.selectableElements = [];
+  }
+
+  private handleBlockClick(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const clickEvent = event as MouseEvent;
+    const element = event.target as HTMLElement;
+    const blockId = this.generateBlockId(element);
+    const currentBlockIndex = this.selectableElements.indexOf(element);
+    
+    if (clickEvent.shiftKey && this.lastSelectedBlockIndex !== -1 && currentBlockIndex !== -1) {
+      // Shift+click: Select range between last selected and current block
+      this.selectBlockRange(this.lastSelectedBlockIndex, currentBlockIndex);
+    } else {
+      // Normal click
+      if (this.isBlockSelected(element)) {
+        // Unselect the block
+        this.unselectBlock(element, blockId);
+        // Update last selected index to the previous selected block (if any)
+        this.updateLastSelectedBlockIndex();
+      } else {
+        // Select the block
+        this.selectBlock(element, blockId);
+        // Update last selected index
+        this.lastSelectedBlockIndex = currentBlockIndex;
+      }
+    }
+    
+    this.updateBlockCountDisplay();
+    this.notifyPopupOfSelection();
+  }
+
+  private generateBlockId(element: HTMLElement): string {
+    // Generate a unique ID for the block based on its position and content
+    const rect = element.getBoundingClientRect();
+    const text = (element.innerText || element.textContent || '').substring(0, 50);
+    return `block_${Math.round(rect.top)}_${Math.round(rect.left)}_${text.replace(/\s+/g, '_')}`;
+  }
+
+  private isBlockSelected(element: HTMLElement): boolean {
+    const blockId = this.generateBlockId(element);
+    return this.selectedBlocks.some(block => block.id === blockId);
+  }
+
+  private selectBlock(element: HTMLElement, blockId: string): void {
+    // Use textContent for more comprehensive text extraction, fallback to innerText
+    const text = (element.textContent?.trim() || element.innerText?.trim() || '');
+    const tagName = element.tagName.toLowerCase();
+    
+    // Only add blocks with meaningful text content
+    if (text.length < 10) {
+      console.log('🚫 Skipping block with insufficient text:', text.substring(0, 50));
+      return;
+    }
+    
+    // Store original styles for later restoration
+    const originalBorder = element.style.border || '';
+    const originalBackground = element.style.backgroundColor || '';
+    
+    this.selectedBlocks.push({
+      id: blockId,
+      text: text,
+      element: tagName,
+      domElement: element, // Store direct reference to DOM element
+      originalStyles: {
+        border: originalBorder,
+        backgroundColor: originalBackground
+      }
+    });
+    
+    // Highlight the selected block
+    element.style.border = '2px solid #e52e71';
+    element.style.backgroundColor = 'rgba(229, 46, 113, 0.2)';
+    element.style.cursor = 'pointer';
+    
+    console.log(`✅ Selected block: ${tagName} (${text.length} chars)`);
+  }
+
+  private selectBlockRange(startIndex: number, endIndex: number): void {
+    const minIndex = Math.min(startIndex, endIndex);
+    const maxIndex = Math.max(startIndex, endIndex);
+    
+    console.log(`🔗 Selecting range: blocks ${minIndex} to ${maxIndex} (${maxIndex - minIndex + 1} blocks)`);
+    
+    for (let i = minIndex; i <= maxIndex; i++) {
+      const element = this.selectableElements[i];
+      if (element && !this.isBlockSelected(element)) {
+        const blockId = this.generateBlockId(element);
+        this.selectBlock(element, blockId);
+      }
+    }
+    
+    // Update last selected to the clicked block
+    this.lastSelectedBlockIndex = endIndex;
+  }
+
+  private updateLastSelectedBlockIndex(): void {
+    // Find the last selected block index
+    if (this.selectedBlocks.length === 0) {
+      this.lastSelectedBlockIndex = -1;
+    } else {
+      // Get the last selected block's element and find its index
+      const lastBlock = this.selectedBlocks[this.selectedBlocks.length - 1];
+      this.lastSelectedBlockIndex = this.selectableElements.indexOf(lastBlock.domElement);
+    }
+  }
+
+  private unselectBlock(element: HTMLElement, blockId: string): void {
+    const selectedBlock = this.selectedBlocks.find(block => block.id === blockId);
+    
+    if (selectedBlock) {
+      // Restore original styles using stored values
+      element.style.border = selectedBlock.originalStyles.border;
+      element.style.backgroundColor = selectedBlock.originalStyles.backgroundColor;
+      element.style.cursor = '';
+    }
+    
+    // Remove from selected blocks array
+    this.selectedBlocks = this.selectedBlocks.filter(block => block.id !== blockId);
+    
+    console.log(`❌ Unselected block: ${blockId}`);
+  }
+
+  private clearSelectedBlocks(): void {
+    console.log(`🧹 Clearing ${this.selectedBlocks.length} selected blocks`);
+    
+    // Clear visual highlights using direct element references
+    this.selectedBlocks.forEach((block, index) => {
+      try {
+        const element = block.domElement;
+        if (element && element.parentNode) {
+          // Restore original styles completely
+          element.style.border = block.originalStyles.border;
+          element.style.backgroundColor = block.originalStyles.backgroundColor;
+          element.style.cursor = '';
+          element.style.outline = ''; // Also clear outline
+          
+          // Remove any classes we might have added
+          element.classList.remove('going-bananas-selected', 'going-bananas-analyzed');
+          
+          console.log(`✅ Cleared block ${index + 1}: ${block.element}`);
+        } else {
+          console.log(`⚠️ Block ${index + 1} element no longer in DOM`);
+        }
+      } catch (error) {
+        console.log(`❌ Error clearing block ${index + 1}:`, error);
+      }
+    });
+    
+    this.selectedBlocks = [];
+    this.lastSelectedBlockIndex = -1; // Reset range selection tracking
+    this.updateBlockCountDisplay();
+    this.notifyPopupOfSelection();
+    
+    // Additional aggressive cleanup after regular cleanup
+    setTimeout(() => {
+      this.ultraAggressiveCleanup();
+    }, 100);
+    
+    console.log('🧹 All selected blocks cleared');
+  }
+
+  // Ultra-aggressive cleanup method for stubborn styles
+  private ultraAggressiveCleanup(): void {
+    console.log('💥 Performing ultra-aggressive style cleanup...');
+    
+    // Remove any elements with our specific IDs that might be lingering
+    const goingBananasElements = document.querySelectorAll('[id*="going-bananas"], [class*="going-bananas"]');
+    goingBananasElements.forEach((el) => {
+      if (el.id !== 'going-bananas-result') { // Keep analysis results
+        console.log(`🗑️ Removing lingering element: ${el.id || el.className}`);
+        el.remove();
+      }
+    });
+    
+    // Clear any inline styles that match our patterns more aggressively
+    const allElements = document.querySelectorAll('*');
+    let cleanedCount = 0;
+    
+    allElements.forEach((element: Element) => {
+      const htmlElement = element as HTMLElement;
+      const computedStyle = window.getComputedStyle(htmlElement);
+      
+      // Check computed styles for our colors and reset if found
+      if (computedStyle.borderColor && (
+          computedStyle.borderColor.includes('229, 46, 113') ||
+          computedStyle.borderColor.includes('255, 138, 0')
+        )) {
+        htmlElement.style.border = 'none';
+        cleanedCount++;
+      }
+      
+      if (computedStyle.backgroundColor && (
+          computedStyle.backgroundColor.includes('229, 46, 113') ||
+          computedStyle.backgroundColor.includes('255, 138, 0')
+        )) {
+        htmlElement.style.backgroundColor = 'transparent';
+        cleanedCount++;
+      }
+      
+      // Force remove any transition that might be keeping styles
+      if (htmlElement.style.transition && htmlElement.style.transition.includes('border')) {
+        htmlElement.style.transition = '';
+        cleanedCount++;
+      }
+    });
+    
+    console.log(`💥 Ultra-aggressive cleanup completed: ${cleanedCount} additional fixes applied`);
+  }
+
+  private clearBlockHighlights(): void {
+    console.log(`🧹 Clearing hover effects from ${this.selectableElements.length} elements`);
+    
+    this.selectableElements.forEach((element, index) => {
+      try {
+        const data = (element as any).__blockSelectorData;
+        if (data) {
+          // Remove event listeners first
+          if (data.mouseEnterHandler) {
+            element.removeEventListener('mouseenter', data.mouseEnterHandler);
+          }
+          if (data.mouseLeaveHandler) {
+            element.removeEventListener('mouseleave', data.mouseLeaveHandler);
+          }
+          
+          // Force restore original styles (in case element is currently hovered)
+          element.style.border = data.originalBorder || '';
+          element.style.backgroundColor = data.originalBackground || '';
+          element.style.cursor = '';
+          
+          // Clean up the stored data
+          delete (element as any).__blockSelectorData;
+          
+          console.log(`✅ Cleared hover effect ${index + 1}`);
+        }
+      } catch (error) {
+        console.log(`❌ Error clearing hover effect ${index + 1}:`, error);
+      }
+    });
+    
+    // Clear the selectable elements array
+    this.selectableElements = [];
+    console.log('🧹 All hover effects cleared');
+  }
+
+  private aggressiveStyleCleanup(): void {
+    console.log('🧽 Performing aggressive style cleanup...');
+    
+    // Find any elements that might have our styling applied
+    const potentialElements = document.querySelectorAll('*');
+    let cleanedCount = 0;
+    
+    potentialElements.forEach((element: Element) => {
+      const htmlElement = element as HTMLElement;
+      const style = htmlElement.style;
+      
+      // Look for ANY border styles that might be ours (more comprehensive)
+      if (style.border && (
+          style.border.includes('2px solid #e52e71') ||     // Selection style
+          style.border.includes('2px dashed #ff8a00') ||    // Hover style  
+          style.border.includes('2px solid') ||             // Any 2px solid border
+          style.border.includes('2px dashed') ||            // Any 2px dashed border
+          style.border.includes('#e52e71') ||               // Our pink color
+          style.border.includes('#ff8a00') ||               // Our orange color
+          style.border.includes('rgba(229, 46, 113') ||     // Pink rgba variations
+          style.border.includes('rgba(255, 138, 0')         // Orange rgba variations
+        )) {
+        const originalBorder = style.border;
+        style.border = '';
+        console.log(`🧽 Cleaned border: ${originalBorder}`);
+        cleanedCount++;
+      }
+      
+      // Look for ANY background colors that might be ours
+      if (style.backgroundColor && (
+          style.backgroundColor.includes('rgba(229, 46, 113, 0.2)') ||  // Selection background
+          style.backgroundColor.includes('rgba(255, 138, 0, 0.1)') ||   // Hover background
+          style.backgroundColor.includes('rgba(229, 46, 113') ||        // Any pink rgba
+          style.backgroundColor.includes('rgba(255, 138, 0') ||         // Any orange rgba
+          style.backgroundColor === 'rgb(229, 46, 113)' ||              // Solid pink
+          style.backgroundColor === 'rgb(255, 138, 0)' ||               // Solid orange
+          style.backgroundColor.includes('#e52e71') ||                   // Hex pink
+          style.backgroundColor.includes('#ff8a00')                     // Hex orange
+        )) {
+        const originalBg = style.backgroundColor;
+        style.backgroundColor = '';
+        console.log(`🧽 Cleaned background: ${originalBg}`);
+        cleanedCount++;
+      }
+      
+      // Reset cursor if it was set by us
+      if (style.cursor === 'pointer') {
+        style.cursor = '';
+        cleanedCount++;
+      }
+      
+      // Clean up any remaining block selector data
+      if ((htmlElement as any).__blockSelectorData) {
+        delete (htmlElement as any).__blockSelectorData;
+        cleanedCount++;
+      }
+      
+      // Also check for outline styles that might be applied
+      if (style.outline && (
+          style.outline.includes('#e52e71') ||
+          style.outline.includes('#ff8a00') ||
+          style.outline.includes('2px')
+        )) {
+        style.outline = '';
+        cleanedCount++;
+      }
+    });
+    
+    console.log(`🧽 Aggressive cleanup completed: ${cleanedCount} style fixes applied`);
+  }
+
+  private updateBlockCountDisplay(): void {
+    const countDisplay = document.getElementById('block-count-display');
+    const analyzeBtn = document.getElementById('analyze-blocks-btn') as HTMLButtonElement;
+    
+    if (countDisplay) {
+      const count = this.selectedBlocks.length;
+      const totalChars = this.selectedBlocks.reduce((sum, block) => sum + block.text.length, 0);
+      countDisplay.textContent = count === 0 
+        ? '0 blocks selected' 
+        : `${count} block${count === 1 ? '' : 's'} selected (${totalChars} chars)`;
+    }
+    
+    // Enable/disable analyze button based on selection
+    if (analyzeBtn) {
+      const hasSelection = this.selectedBlocks.length > 0;
+      analyzeBtn.style.opacity = hasSelection ? '1' : '0.5';
+      analyzeBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+      analyzeBtn.style.cursor = hasSelection ? 'pointer' : 'default';
+    }
+  }
+
+  private notifyPopupOfSelection(): void {
+    chrome.runtime.sendMessage({
+      action: 'blocksSelected',
+      blocks: this.selectedBlocks
+    });
+  }
+
+  private showBlockAnalysisResult(analysis: any, selectedBlocks: any[]): void {
+    console.log('📊 Displaying block analysis result:', analysis);
+    
+    // Use the existing showAnalysisNotification method but with block context
+    const enhancedAnalysis = {
+      ...analysis,
+      context: {
+        type: 'block_selection',
+        blocks_analyzed: selectedBlocks?.length || 0,
+        total_content_length: selectedBlocks?.reduce((sum, block) => sum + block.text.length, 0) || 0
+      }
+    };
+    
+    this.showAnalysisNotification(enhancedAnalysis);
+  }
+
+  // Extension Connection Check Methods
+  private startExtensionConnectionCheck(): void {
+    // Check every 2 seconds if extension is still connected
+    this.extensionCheckInterval = window.setInterval(() => {
+      this.checkExtensionConnection();
+    }, 2000);
+  }
+
+  private stopExtensionConnectionCheck(): void {
+    if (this.extensionCheckInterval) {
+      clearInterval(this.extensionCheckInterval);
+      this.extensionCheckInterval = null;
+    }
+  }
+
+  private checkExtensionConnection(): void {
+    if (!this.blockSelectorActive) {
+      this.stopExtensionConnectionCheck();
+      return;
+    }
+
+    try {
+      // Try to send a ping message to the extension
+      chrome.runtime.sendMessage({ action: 'ping' }, (response) => {
+        if (chrome.runtime.lastError || !response) {
+          console.log('🔌 Extension disconnected, cleaning up block selector');
+          this.hideBlockSelector();
+        }
+      });
+    } catch (error) {
+      console.log('🔌 Extension context invalidated, cleaning up block selector');
+      this.hideBlockSelector();
+    }
+  }
+
+  // Analyze selected blocks directly from toolbar
+  private async analyzeSelectedBlocksFromToolbar(): Promise<void> {
+    if (this.selectedBlocks.length === 0) {
+      this.showToolbarNotification('⚠️ Please select some content blocks first!', 'error');
+      return;
+    }
+
+    // Combine all selected block texts with better formatting
+    const combinedText = this.selectedBlocks
+      .map(block => block.text.trim())
+      .filter(text => text.length > 0)  // Remove empty texts
+      .join('\n\n');
+    
+    console.log(`📝 Combined text from ${this.selectedBlocks.length} blocks: ${combinedText.length} characters`);
+    console.log(`📄 First 200 chars: "${combinedText.substring(0, 200)}..."`);
+    
+    if (combinedText.length < 50) {
+      this.showToolbarNotification('⚠️ Selected content must be at least 50 characters for analysis', 'error');
+      return;
+    }
+
+    if (combinedText.length > 50000) {
+      this.showToolbarNotification('⚠️ Selected content is too long (max 50,000 chars)', 'error');
+      return;
+    }
+
+    try {
+      // Show loading state
+      this.setAnalyzeButtonLoading(true);
+      this.showToolbarNotification('🔍 Analyzing selected blocks...', 'info');
+      
+      console.log(`🎯 Analyzing ${this.selectedBlocks.length} selected blocks (${combinedText.length} chars)`);
+      
+      const response = await fetch('http://localhost:3000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: combinedText,
+          url: this.currentUrl,
+          options: {
+            language: 'en',
+            detail_level: 'comprehensive',
+            categories: ['privacy', 'liability', 'termination', 'payment'],
+            cache: true
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Analysis failed with status: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Toolbar analysis result:', result);
+      
+      if (result.success && result.analysis) {
+        // Show success message
+        this.showToolbarNotification(`✅ Analysis complete! Risk: ${result.analysis.risk_level || 'unknown'}`, 'success');
+        
+        // Display the analysis result
+        const enhancedAnalysis = {
+          ...result.analysis,
+          context: {
+            type: 'toolbar_block_selection',
+            blocks_analyzed: this.selectedBlocks.length,
+            total_content_length: combinedText.length,
+            selection_method: 'toolbar'
+          }
+        };
+        
+        console.log('🎯 Showing analysis popup with results');
+        this.showAnalysisNotification(enhancedAnalysis);
+        
+        // Auto-expand the notification for toolbar analyses since it's a deliberate user action
+        setTimeout(() => {
+          const notification = document.getElementById('going-bananas-result');
+          if (notification) {
+            console.log('📖 Auto-expanding analysis details');
+            notification.click(); // This will expand the notification
+          }
+        }, 500);
+        
+        // Note: Block selection cleanup is now handled when popup is closed
+        
+      } else {
+        throw new Error(result.error || 'Analysis failed - no analysis data returned');
+      }
+      
+    } catch (error) {
+      console.error('❌ Toolbar analysis error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      this.showToolbarNotification(`❌ Analysis failed: ${errorMessage}`, 'error');
+    } finally {
+      this.setAnalyzeButtonLoading(false);
+    }
+  }
+
+  private showToolbarNotification(message: string, type: 'success' | 'error' | 'info'): void {
+    const countDisplay = document.getElementById('block-count-display');
+    if (countDisplay) {
+      const originalText = countDisplay.textContent;
+      const originalBg = countDisplay.style.background;
+      
+      // Show notification
+      countDisplay.textContent = message;
+      countDisplay.style.background = type === 'success' ? 'rgba(34, 197, 94, 0.9)' :
+                                     type === 'error' ? 'rgba(239, 68, 68, 0.9)' :
+                                     'rgba(59, 130, 246, 0.9)';
+      
+      // Restore original after 3 seconds
+      setTimeout(() => {
+        if (countDisplay.textContent === message) {
+          countDisplay.textContent = originalText;
+          countDisplay.style.background = originalBg;
+        }
+      }, 3000);
+    }
+  }
+
+  private setAnalyzeButtonLoading(loading: boolean): void {
+    const analyzeBtn = document.getElementById('analyze-blocks-btn') as HTMLButtonElement;
+    if (analyzeBtn) {
+      if (loading) {
+        analyzeBtn.textContent = '⏳ Analyzing...';
+        analyzeBtn.style.opacity = '0.7';
+        analyzeBtn.style.pointerEvents = 'none';
+      } else {
+        analyzeBtn.textContent = '🔍 Analyze';
+        analyzeBtn.style.opacity = this.selectedBlocks.length > 0 ? '1' : '0.5';
+        analyzeBtn.style.pointerEvents = this.selectedBlocks.length > 0 ? 'auto' : 'none';
+      }
+    }
   }
 }
 

@@ -8,6 +8,7 @@
   pointer-events: none;
   animation: slideInRight 0.3s ease-out;
 }
+body.going-bananas-block-selector-active #banana-analysis-indicator { top: 80px; }
 
 .banana-indicator-content {
   display: flex;
@@ -192,6 +193,7 @@
   z-index: 999999;
   overflow: hidden;
 }
+body.going-bananas-block-selector-active .banana-progress { top: 60px; }
 
 .banana-progress-bar {
   height: 100%;

@@ -3,12 +3,14 @@
   "name": "Going Bananas - T&C Analyzer",
   "version": "1.0.0",
   "description": "AI-powered terms and conditions analyzer built with React and TypeScript",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
   "host_permissions": [
-    "http://localhost:3001/*",
-    "https://api.goingbananas.dev/*",
-    "http://*/*",
-    "https://*/*"
+    "http://localhost:3000/*",
+    "https://api.goingbananas.dev/*"
   ],
   
   "background": {
@@ -18,6 +20,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content/content.js"],
+      "css": ["content/content.css"],
       "run_at": "document_idle"
     }
   ],

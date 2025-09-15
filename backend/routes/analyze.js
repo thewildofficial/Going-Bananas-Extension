@@ -238,6 +238,125 @@ router.post('/', async (req, res) => {
 });
 
 /**
+ * POST /selected-text
+ * Analyze selected text from terms and conditions
+ */
+router.post('/selected-text', async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const selectedTextSchema = Joi.object({
+      text: Joi.string().min(10).max(5000).required()
+        .messages({
+          'string.min': 'Selected text must be at least 10 characters long',
+          'string.max': 'Selected text must not exceed 5,000 characters',
+          'any.required': 'Selected text is required for analysis'
+        }),
+      url: Joi.string().uri().optional(),
+      context: Joi.string().optional(), // Additional context about the selection
+      options: Joi.object({
+        language: Joi.string().valid('en', 'es', 'fr', 'de', 'it', 'pt').default('en'),
+        detail_level: Joi.string().valid('basic', 'standard', 'comprehensive').default('comprehensive'),
+        focus_areas: Joi.array().items(
+          Joi.string().valid('data_usage', 'user_obligations', 'service_limitations', 'privacy_practices', 'liability_clauses', 'termination_terms')
+        ).default(['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices']),
+        include_recommendations: Joi.boolean().default(true),
+        risk_assessment: Joi.boolean().default(true)
+      }).default({})
+    });
+
+    const { error, value: validatedData } = selectedTextSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        details: error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message
+        }))
+      });
+    }
+
+    const { text, url, context, options } = validatedData;
+
+    logger.info('Selected text analysis request received:', {
+      textLength: text.length,
+      url: url || 'not provided',
+      context: context || 'not provided',
+      options: options,
+      ip: req.ip
+    });
+
+    // Create specialized analysis options for selected text
+    const selectedTextOptions = {
+      ...options,
+      url: url,
+      originalLength: text.length,
+      selectedTextAnalysis: true,
+      context: context,
+      // Enhanced analysis for selected text
+      detail_level: 'comprehensive',
+      categories: ['privacy', 'data-collection', 'user-rights', 'terms-of-service', 'liability', 'termination'],
+      focus_areas: options.focus_areas || ['data_usage', 'user_obligations', 'service_limitations', 'privacy_practices'],
+      include_recommendations: options.include_recommendations !== false,
+      risk_assessment: options.risk_assessment !== false,
+      output_format: 'structured'
+    };
+
+    // Perform analysis with specialized prompt for selected text
+    const analysis = await analysisService.analyzeSelectedText(text, selectedTextOptions);
+
+    // Log successful analysis
+    logger.info('Selected text analysis completed successfully:', {
+      textLength: text.length,
+      riskScore: analysis.risk_score,
+      riskLevel: analysis.risk_level,
+      confidence: analysis.confidence,
+      processingTime: Date.now() - startTime
+    });
+
+    // Return successful response
+    res.json({
+      success: true,
+      analysis: analysis,
+      metadata: {
+        processing_time: Date.now() - startTime,
+        text_length: text.length,
+        analysis_type: 'selected_text',
+        timestamp: new Date().toISOString(),
+        features: {
+          selectedTextAnalysis: true,
+          comprehensive: true,
+          contextual: !!context
+        }
+      }
+    });
+
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    
+    logger.error(`Selected text analysis failed: ${error.message}`, {
+      stack: error.stack,
+      processingTime: processingTime,
+      textLength: req.body?.text?.length || 0,
+      ip: req.ip
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Selected text analysis failed',
+      metadata: {
+        processing_time: processingTime,
+        timestamp: new Date().toISOString(),
+        ...(process.env.NODE_ENV === 'development' && {
+          debug_error: error.message
+        })
+      }
+    });
+  }
+});
+
+/**
  * POST /batch
  * Analyze multiple terms and conditions texts in batch
  */
