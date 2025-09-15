@@ -18,6 +18,11 @@ export const Popup: React.FC = () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
         chrome.tabs.sendMessage(tabs[0].id, { action: "readPageContent" }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.log('Content script not available:', chrome.runtime.lastError.message);
+            setContent("Content script not available. Try refreshing the page.");
+            return;
+          }
           if (response && response.content) {
             setContent(response.content);
           } else {
@@ -26,6 +31,10 @@ export const Popup: React.FC = () => {
         });
 
         chrome.tabs.sendMessage(tabs[0].id, { action: "findTermsPages" }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.log('Content script not available for terms detection:', chrome.runtime.lastError.message);
+            return;
+          }
           if (response && response.termsPages) {
             setTermsPages(response.termsPages);
           }
@@ -218,36 +227,36 @@ export const Popup: React.FC = () => {
     };
   }, [toolbarActive]); // Re-run when toolbarActive changes
 
-  // Beautiful enhanced inline styles
+  // Clean, full-width container styles
   const containerStyle: React.CSSProperties = {
-    width: '400px',
-    height: '650px',
+    width: '100vw',
+    height: '100vh',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     fontSize: '14px',
     lineHeight: '1.5',
     color: '#1a1a1a',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: '#ffffff',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    borderRadius: '16px',
-    margin: '12px',
-    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15), 0 8px 25px rgba(0, 0, 0, 0.1)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)'
+    margin: 0,
+    padding: 0,
+    border: 'none',
+    borderRadius: 0
   };
 
   const headerStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '20px 24px',
-    background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 50%, #ffa8a8 100%)',
+    padding: '12px 16px',
+    background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
     color: 'white',
-    borderRadius: '16px 16px 0 0',
-    boxShadow: '0 4px 20px rgba(255, 107, 107, 0.3)',
+    borderRadius: 0,
+    boxShadow: 'none',
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
   };
 
   const logoStyle: React.CSSProperties = {
@@ -259,48 +268,45 @@ export const Popup: React.FC = () => {
   };
 
   const bananaIconStyle: React.CSSProperties = {
-    fontSize: '28px',
-    filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))',
-    animation: 'bounce 2s infinite'
+    fontSize: '20px'
   };
 
   const titleStyle: React.CSSProperties = {
-    fontSize: '20px',
-    fontWeight: '700',
+    fontSize: '16px',
+    fontWeight: '600',
     margin: 0,
-    textShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-    letterSpacing: '-0.5px'
+    letterSpacing: '-0.2px'
   };
 
   const buttonStyle: React.CSSProperties = {
-    background: 'rgba(255, 255, 255, 0.15)',
+    background: 'rgba(255, 255, 255, 0.2)',
     border: 'none',
-    borderRadius: '12px',
-    width: '40px',
-    height: '40px',
+    borderRadius: '8px',
+    width: '36px',
+    height: '36px',
     cursor: 'pointer',
     fontSize: '16px',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    transition: 'all 0.2s ease',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     backdropFilter: 'blur(10px)',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    color: 'white',
     position: 'relative',
     zIndex: 2
   };
 
   const buttonHoverStyle: React.CSSProperties = {
-    background: 'rgba(255, 255, 255, 0.25)',
-    transform: 'translateY(-2px)',
-    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.2)'
+    background: 'rgba(255, 255, 255, 0.3)',
+    transform: 'translateY(-1px)',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
   };
 
   const mainContentStyle: React.CSSProperties = {
     flex: 1,
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    background: '#ffffff',
     overflowY: 'auto',
-    borderRadius: '0 0 16px 16px'
+    borderRadius: 0
   };
 
   const loadingStyle: React.CSSProperties = {
@@ -359,13 +365,14 @@ export const Popup: React.FC = () => {
   };
 
   const riskHeaderStyle: React.CSSProperties = {
-    padding: '24px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    padding: '16px',
+    background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
     color: 'white',
-    borderRadius: '16px 16px 0 0',
-    boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+    borderRadius: 0,
+    boxShadow: 'none',
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
   };
 
   const riskScoreStyle: React.CSSProperties = {
@@ -413,19 +420,18 @@ export const Popup: React.FC = () => {
   };
 
   const sectionStyle: React.CSSProperties = {
-    padding: '24px',
-    borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
-    background: 'rgba(255, 255, 255, 0.5)',
-    backdropFilter: 'blur(10px)'
+    padding: '16px',
+    borderBottom: '1px solid #f0f0f0',
+    background: '#ffffff'
   };
 
   const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '18px',
-    fontWeight: '700',
-    marginBottom: '16px',
+    fontSize: '16px',
+    fontWeight: '600',
+    marginBottom: '12px',
     color: '#1a1a1a',
-    margin: '0 0 16px 0',
-    letterSpacing: '-0.5px'
+    margin: '0 0 12px 0',
+    letterSpacing: '-0.3px'
   };
 
   const summaryTextStyle: React.CSSProperties = {
@@ -444,36 +450,34 @@ export const Popup: React.FC = () => {
   const keyPointStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '16px',
-    marginBottom: '16px',
-    padding: '16px',
-    borderRadius: '12px',
-    background: 'rgba(248, 249, 250, 0.8)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(0, 0, 0, 0.05)',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-    transition: 'all 0.3s ease'
+    gap: '12px',
+    marginBottom: '12px',
+    padding: '12px',
+    borderRadius: '8px',
+    background: '#f8f9fa',
+    border: '1px solid #e9ecef',
+    transition: 'all 0.2s ease'
   };
 
   const keyPointHighStyle: React.CSSProperties = {
     ...keyPointStyle,
-    background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+    background: '#fee',
     borderLeft: '4px solid #ef4444',
-    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
+    border: '1px solid #fecaca'
   };
 
   const keyPointMediumStyle: React.CSSProperties = {
     ...keyPointStyle,
-    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+    background: '#fffbe5',
     borderLeft: '4px solid #f59e0b',
-    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.15)'
+    border: '1px solid #fde68a'
   };
 
   const keyPointLowStyle: React.CSSProperties = {
     ...keyPointStyle,
-    background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+    background: '#f0fff4',
     borderLeft: '4px solid #10b981',
-    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
+    border: '1px solid #a7f3d0'
   };
 
   const pointIconStyle: React.CSSProperties = {
@@ -636,72 +640,97 @@ export const Popup: React.FC = () => {
       {/* Toolbar Status */}
       {toolbarActive && (
         <div style={{
-          padding: '12px 20px',
-          background: 'rgba(255, 255, 255, 0.1)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.2)'
+          padding: '12px 16px',
+          background: '#f8f9fa',
+          borderBottom: '1px solid #e9ecef'
         }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: '8px'
+            marginBottom: '12px'
           }}>
-            <span style={{ fontSize: '12px', fontWeight: '500', color: 'white' }}>
-              Block Selector Active
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>🎯</span>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: '#495057' }}>
+                Block Selector Mode
+              </span>
+            </div>
             <span style={{
-              fontSize: '11px',
-              background: 'rgba(255, 255, 255, 0.2)',
-              padding: '4px 8px',
-              borderRadius: '12px',
-              color: 'white'
+              fontSize: '12px',
+              background: selectedBlocks.length > 0 ? '#d4edda' : '#e2e3e5',
+              color: selectedBlocks.length > 0 ? '#155724' : '#6c757d',
+              padding: '4px 12px',
+              borderRadius: '16px',
+              fontWeight: '500'
             }}>
-              {selectedBlocks.length > 0 ? `${selectedBlocks.length} blocks selected` : 'Ready to select'}
+              {selectedBlocks.length > 0 ? `${selectedBlocks.length} selected` : 'Ready'}
             </span>
           </div>
           
           {selectedBlocks.length > 0 && (
             <div>
               <div style={{
-                fontSize: '11px',
-                color: 'rgba(255, 255, 255, 0.9)',
-                marginBottom: '8px',
-                padding: '8px',
-                background: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: '6px',
-                maxHeight: '40px',
-                overflowY: 'auto'
+                fontSize: '12px',
+                color: '#6c757d',
+                marginBottom: '12px',
+                padding: '12px',
+                background: '#ffffff',
+                borderRadius: '8px',
+                border: '1px solid #e9ecef'
               }}>
-                {selectedBlocks.length} content blocks selected ({selectedBlocks.reduce((total, block) => total + block.text.length, 0)} chars total)
+                <div style={{ fontWeight: '500', marginBottom: '4px' }}>
+                  {selectedBlocks.length} blocks • {selectedBlocks.reduce((total, block) => total + block.text.length, 0)} characters
+                </div>
+                <div style={{ fontSize: '11px', color: '#868e96' }}>
+                  Ready for analysis
+                </div>
               </div>
               <button
                 onClick={analyzeSelectedBlocks}
                 style={{
                   width: '100%',
-                  padding: '8px 12px',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  color: '#ff6b95',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
+                  color: 'white',
                   border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '12px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
                   fontWeight: '600',
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(255, 107, 149, 0.3)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 149, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 107, 149, 0.3)';
                 }}
               >
-                Analyze Selected Blocks
+                🔍 Analyze Selected Content
               </button>
             </div>
           )}
           
           {selectedBlocks.length === 0 && (
             <div style={{
-              fontSize: '11px',
-              color: 'rgba(255, 255, 255, 0.8)',
+              fontSize: '12px',
+              color: '#6c757d',
               textAlign: 'center',
-              padding: '8px'
+              padding: '12px',
+              background: '#ffffff',
+              borderRadius: '8px',
+              border: '1px solid #e9ecef',
+              borderStyle: 'dashed'
             }}>
-              💡 Click on content blocks on the page to select them for analysis
+              <div style={{ fontSize: '20px', marginBottom: '8px' }}>👆</div>
+              <div style={{ fontWeight: '500', marginBottom: '4px' }}>Click blocks on the page</div>
+              <div style={{ fontSize: '11px', color: '#868e96' }}>
+                Select content to analyze specific sections
+              </div>
             </div>
           )}
         </div>
@@ -710,36 +739,63 @@ export const Popup: React.FC = () => {
       {/* Notification Toast */}
       {notification && (
         <div style={{
-          position: 'absolute',
-          top: '80px',
-          left: '20px',
-          right: '20px',
-          zIndex: 50,
-          padding: '12px',
-          borderRadius: '8px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-          transition: 'all 0.3s ease',
-          background: notification.type === 'error' ? '#fee' : notification.type === 'success' ? '#e8f5e8' : '#e3f2fd',
-          border: notification.type === 'error' ? '1px solid #ffcdd2' : notification.type === 'success' ? '1px solid #c8e6c9' : '1px solid #bbdefb',
-          color: notification.type === 'error' ? '#c62828' : notification.type === 'success' ? '#2e7d32' : '#1565c0'
+          position: 'fixed',
+          top: '16px',
+          left: '16px',
+          right: '16px',
+          zIndex: 1000,
+          padding: '16px',
+          borderRadius: '12px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          background: notification.type === 'error' ? '#fee' : notification.type === 'success' ? '#d4edda' : '#d1ecf1',
+          border: `1px solid ${notification.type === 'error' ? '#f5c6cb' : notification.type === 'success' ? '#c3e6cb' : '#bee5eb'}`,
+          color: notification.type === 'error' ? '#721c24' : notification.type === 'success' ? '#155724' : '#0c5460',
+          backdropFilter: 'blur(10px)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px' }}>
-              {notification.type === 'error' && '⚠️ '}
-              {notification.type === 'success' && '✅ '}
-              {notification.type === 'info' && 'ℹ️ '}
-            </span>
-            <span style={{ flex: 1, fontSize: '12px', fontWeight: '500' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ 
+              fontSize: '18px',
+              width: '24px',
+              height: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              background: notification.type === 'error' ? 'rgba(220, 53, 69, 0.1)' : 
+                         notification.type === 'success' ? 'rgba(40, 167, 69, 0.1)' : 
+                         'rgba(23, 162, 184, 0.1)'
+            }}>
+              {notification.type === 'error' && '⚠️'}
+              {notification.type === 'success' && '✅'}
+              {notification.type === 'info' && 'ℹ️'}
+            </div>
+            <span style={{ flex: 1, fontSize: '14px', fontWeight: '500', lineHeight: '1.4' }}>
               {notification.message}
             </span>
             <button
               onClick={() => setNotification(null)}
               style={{
-                background: 'none',
+                background: 'rgba(0, 0, 0, 0.05)',
                 border: 'none',
-                fontSize: '14px',
+                borderRadius: '6px',
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                fontSize: '12px',
                 opacity: 0.7
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)';
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+                e.currentTarget.style.opacity = '0.7';
               }}
             >
               ✕
@@ -953,19 +1009,74 @@ export const Popup: React.FC = () => {
             )}
 
             {/* Action Buttons */}
-            <div style={actionButtonsStyle}>
+            <div style={{
+              padding: '16px',
+              display: 'flex',
+              gap: '12px',
+              borderTop: '1px solid #f0f0f0',
+              background: '#f8f9fa'
+            }}>
               <button
                 onClick={handleShare}
-                style={btnSecondaryStyle}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '8px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  background: '#ffffff',
+                  color: '#495057',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontSize: '14px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#e9ecef';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = '#ffffff';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               >
                 <Share size={16} />
-                Share Results
+                Share
               </button>
               <button
                 onClick={() => chrome.tabs.create({ url: '/options/options.html' })}
-                style={btnPrimaryStyle}
+                style={{
+                  flex: 2,
+                  padding: '12px 16px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontSize: '14px',
+                  boxShadow: '0 2px 8px rgba(255, 107, 149, 0.3)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 149, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 107, 149, 0.3)';
+                }}
               >
-                View Full Analysis
+                📊 View Full Analysis
               </button>
             </div>
 

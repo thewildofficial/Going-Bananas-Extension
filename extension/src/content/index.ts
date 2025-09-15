@@ -68,6 +68,62 @@ class TermsAnalyzer {
   private async handleMessage(message: any, sender: any, sendResponse: any): Promise<void> {
     try {
       switch (message.action) {
+        case 'analyzeTerms': {
+          const text = document.body.innerText || '';
+          const url = window.location.href;
+          try {
+            const bgResponse = await chrome.runtime.sendMessage({
+              action: 'analyzeTermsText',
+              data: { text, url, timestamp: Date.now() }
+            });
+
+            if (bgResponse && bgResponse.success) {
+              sendResponse({ success: true, analysis: bgResponse.analysis || bgResponse });
+            } else {
+              sendResponse({ success: false, error: bgResponse?.error || 'Analysis failed' });
+            }
+          } catch (err) {
+            sendResponse({ success: false, error: err instanceof Error ? err.message : 'Analysis request failed' });
+          }
+          break;
+        }
+
+        case 'manualScan': {
+          const text = document.body.innerText || '';
+          const url = window.location.href;
+          try {
+            const bgResponse = await chrome.runtime.sendMessage({
+              action: 'analyzeTermsText',
+              data: { text, url, timestamp: Date.now() }
+            });
+
+            if (bgResponse && bgResponse.success) {
+              sendResponse({ success: true, analysis: bgResponse.analysis || bgResponse });
+            } else {
+              sendResponse({ success: false, error: bgResponse?.error || 'Manual scan failed' });
+            }
+          } catch (err) {
+            sendResponse({ success: false, error: err instanceof Error ? err.message : 'Manual scan request failed' });
+          }
+          break;
+        }
+
+        case 'autoAnalyze': {
+          // Fire-and-forget compatibility; trigger background flow as needed
+          const text = document.body.innerText || '';
+          const url = window.location.href;
+          try {
+            await chrome.runtime.sendMessage({
+              action: 'analyzeTermsText',
+              data: { text, url, timestamp: Date.now() }
+            });
+            sendResponse({ success: true });
+          } catch (err) {
+            sendResponse({ success: false, error: err instanceof Error ? err.message : 'Auto analysis failed' });
+          }
+          break;
+        }
+
         case "readPageContent":
           const pageContent = document.body.innerText;
           sendResponse({ content: pageContent });
