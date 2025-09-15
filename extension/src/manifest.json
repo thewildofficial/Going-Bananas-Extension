@@ -6,16 +6,11 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting",
-    "identity",
-    "notifications"
+    "scripting"
   ],
   "host_permissions": [
     "http://localhost:3000/*",
-    "http://localhost:3001/*",
-    "https://api.goingbananas.dev/*",
-    "http://*/*",
-    "https://*/*"
+    "https://api.goingbananas.dev/*"
   ],
   
   "background": {
