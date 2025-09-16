@@ -11,7 +11,8 @@ module.exports = (env, argv) => {
       popup: './src/popup/index.tsx',
       options: './src/options/index.tsx',
       content: './src/content/index.ts',
-      background: './src/background/index.ts'
+      background: './src/background/index.ts',
+      login: './src/login/index.ts'
     },
     output: {
       path: path.resolve(__dirname, 'dist'),
@@ -61,7 +62,7 @@ module.exports = (env, argv) => {
       new HtmlWebpackPlugin({
         template: './src/login/login.html',
         filename: 'login/login.html',
-        chunks: []
+        chunks: ['login']
       }),
       new CopyWebpackPlugin({
         patterns: [
