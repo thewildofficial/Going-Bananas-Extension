@@ -1,6 +1,6 @@
 // Test analysis service major clauses preservation
-const AnalysisService = require('./services/analysisService');
-const GeminiService = require('./services/geminiService');
+const AnalysisService = require('../services/analysisService');
+const GeminiService = require('../services/geminiService');
 
 async function testAnalysisService() {
   const geminiService = new GeminiService();

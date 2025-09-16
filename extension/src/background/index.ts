@@ -37,8 +37,16 @@ class BackgroundService {
 
   private handleInstallation(details: chrome.runtime.InstalledDetails): void {
     if (details.reason === 'install') {
+      // Show welcome page with login prompt
       chrome.tabs.create({
-        url: chrome.runtime.getURL('options/options.html')
+        url: chrome.runtime.getURL('popup/popup.html')
+      });
+      
+      // Set up initial storage
+      chrome.storage.local.set({
+        extension_installed: true,
+        installation_date: new Date().toISOString(),
+        first_time_user: true
       });
     }
   }

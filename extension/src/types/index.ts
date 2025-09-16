@@ -62,3 +62,87 @@ export interface HealthCheck {
   cache_size: number;
   last_analysis: number | null;
 }
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  avatar_url?: string;
+  created_at: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export interface PersonalizationData {
+  demographics: {
+    ageRange: string;
+    jurisdiction: {
+      primaryCountry: string;
+      primaryState: string;
+      frequentTravel: boolean;
+      isExpatriate: boolean;
+    };
+    occupation: string;
+  };
+  digitalBehavior: {
+    techSophistication: {
+      readingFrequency: string;
+      comfortLevel: string;
+      preferredExplanationStyle: string;
+    };
+    usagePatterns: {
+      primaryActivities: string[];
+      signupFrequency: string;
+      deviceUsage: string;
+    };
+  };
+  riskPreferences: {
+    privacy: {
+      overallImportance: string;
+      sensitiveDataTypes: Array<{ dataType: string; priorityLevel: number }>;
+      dataProcessingComfort: {
+        domesticProcessing: string;
+        internationalTransfers: string;
+        thirdPartySharing: string;
+        aiProcessing: string;
+        longTermStorage: string;
+      };
+    };
+    financial: {
+      paymentApproach: string;
+      feeImpact: string;
+      financialSituation: string;
+      subscriptionTolerance: {
+        autoRenewal: string;
+        freeTrialToSubscription: string;
+        priceChanges: string;
+      };
+    };
+    legal: {
+      arbitrationComfort: string;
+      liabilityTolerance: string;
+      legalKnowledge: {
+        contractLaw: string;
+        privacyLaw: string;
+        consumerRights: string;
+      };
+      previousIssues: string;
+    };
+  };
+  contextualFactors: {
+    dependentStatus: string;
+    specialCircumstances: string[];
+    decisionMakingPriorities: Array<{ factor: string; priority: number }>;
+    alertPreferences: {
+      interruptionTiming: string;
+      educationalContent: string;
+      alertFrequencyLimit: number;
+      learningMode: boolean;
+    };
+  };
+}
