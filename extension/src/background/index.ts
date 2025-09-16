@@ -102,6 +102,14 @@ class BackgroundService {
           }
           break;
 
+        case 'ping':
+          // Respond to ping messages from content scripts
+          sendResponse({
+            success: true,
+            message: 'pong'
+          });
+          break;
+
         default:
           sendResponse({
             success: false,

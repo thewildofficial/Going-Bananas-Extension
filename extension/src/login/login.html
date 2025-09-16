@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Going Bananas Extension - Login</title>
+  <meta name="description" content="Secure sign-in for the T&C Summarizer browser extension." />
+  <style>
+    :root {
+      --bg: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+      --card-bg: #ffffff;
+      --border: #e9ecef;
+      --text: #1a1a1a;
+      --muted: #4a5568;
+      --accent: #ff6b95;
+      --accent-2: #ff9a56;
+      --danger: #ef4444;
+      --shadow: 0 8px 32px rgba(0,0,0,0.12);
+      --radius-xl: 16px;
+      --radius-2xl: 20px;
+      --focus: 0 0 0 3px rgba(255,107,149,.35);
+    }
+    html,body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      line-height: 1.5;
+    }
+    .shell {
+      width: min(92vw, 980px);
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 28px;
+      align-items: center;
+    }
+    @media (max-width: 920px) {
+      .shell { grid-template-columns: 1fr; gap: 18px; }
+      .art { order: -1; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-2xl);
+      box-shadow: var(--shadow);
+      padding: 32px;
+    }
+
+    .brand {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 6px;
+    }
+    .logo {
+      width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+      box-shadow: 0 4px 16px rgba(255,107,149,0.3);
+    }
+    .logo svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,.2)); }
+    h1 { font-size: clamp(22px, 3.4vw, 28px); margin: 0 0 2px; letter-spacing: .2px; }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+
+    .form {
+      display: grid; gap: 14px; margin-top: 10px;
+    }
+    .row { display: grid; gap: 8px; }
+    label { font-size: 13px; color: #d9dce6; }
+    input[type="email"], input[type="password"] {
+      background: rgba(255,255,255,.08);
+      border: 1px solid var(--border);
+      color: var(--text);
+      outline: none; border-radius: 14px; padding: 12px 14px; font-size: 15px;
+      transition: box-shadow .15s ease, transform .03s ease; 
+    }
+    input::placeholder { color: #c4cad8; opacity: .75; }
+    input:focus { box-shadow: var(--focus); }
+
+    .btn {
+      cursor: pointer;
+      border: 0; outline: none; border-radius: 16px; padding: 12px 14px;
+      font-size: 15px; font-weight: 600; letter-spacing: .2px; color: white;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      transition: transform .06s ease, filter .15s ease, box-shadow .15s ease;
+    }
+    .btn:active { transform: translateY(1px) scale(.995); }
+    .btn.primary { background: linear-gradient(180deg, #7c3aed, #6d28d9); box-shadow: 0 8px 20px rgba(124,58,237,.35); }
+    .btn.neutral { background: rgba(255,255,255,.08); border: 1px solid var(--border); color: #eaeff7; }
+    .btn.google { 
+      background: white; 
+      color: #1a1a1a; 
+      box-shadow: 0 4px 16px rgba(0,0,0,.1);
+      border: 1px solid #e9ecef;
+    }
+
+    .btn .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(0,0,0,.2); border-top-color: currentColor; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .muted { color: var(--muted); font-size: 13px; }
+    .row.inline { display: flex; align-items: center; justify-content: space-between; }
+    .check { display: inline-flex; align-items: center; gap: 8px; }
+
+    .error { color: var(--danger); font-size: 13px; min-height: 18px; }
+
+    .fineprint { margin-top: 12px; font-size: 12px; color: var(--muted); }
+    .fineprint a { color: var(--accent); text-decoration: none; }
+
+    .art {
+      border-radius: var(--radius-2xl);
+      padding: 32px; 
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      box-shadow: var(--shadow);
+    }
+    .kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-top: 16px; }
+    .kpi { background: #f8f9fa; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .kpi .n { font-weight: 700; font-size: 18px; }
+    .kpi .t { color: var(--muted); font-size: 12px; }
+
+    .notice { margin-top: 16px; font-size: 12px; color: #155724; background: #d4edda; border: 1px solid #c3e6cb; padding: 12px 16px; border-radius: 8px; }
+    .demo-badge { font-size: 12px; background: rgba(2,132,199,.28); border: 1px solid rgba(2,132,199,.45); padding: 6px 10px; border-radius: 999px; display: inline-flex; gap: 8px; align-items: center; }
+    .env { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <!-- Sign-in Card -->
+    <section class="card" aria-labelledby="title">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <!-- tiny lock + document mark -->
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 10V7a5 5 0 1 1 10 0v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+            <rect x="4" y="10" width="16" height="10" rx="2" stroke="#fff" stroke-width="2"/>
+          </svg>
+        </div>
+        <h1 id="title">Going Bananas</h1>
+      </div>
+      <p class="sub">Log in to sync your summaries, device settings, and saved highlights.</p>
+
+      <div class="form" id="form">
+        <button id="googleBtn" class="btn google" aria-label="Continue with Google">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.826 31.91 29.274 35 24 35c-7.18 0-13-5.82-13-13s5.82-13 13-13c3.313 0 6.332 1.235 8.639 3.261l5.657-5.657C34.637 3.046 29.566 1 24 1 10.745 1 0 11.745 0 25s10.745 24 24 24s24-10.745 24-24c0-1.627-.17-3.216-.389-4.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.35 16.095 18.821 13 24 13c3.313 0 6.332 1.235 8.639 3.261l5.657-5.657C34.637 3.046 29.566 1 24 1 15.317 1 7.813 6.089 4.258 13.042l2.048 1.649z"/><path fill="#4CAF50" d="M24 49c5.186 0 9.86-1.977 13.432-5.197l-6.199-5.238C29.995 40.847 27.177 42 24 42c-5.248 0-9.681-3.359-11.288-8.028l-6.522 5.02C9.707 44.973 16.316 49 24 49z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-1.078 3.044-3.318 5.452-6.07 6.863l.001-.001 6.199 5.238C34.121 40.855 41 36 41 25c0-1.627-.17-3.216-.389-4.917z"/></svg>
+          <span>Continue with Google</span>
+        </button>
+
+        <div class="row inline">
+          <div class="check">
+            <input type="checkbox" id="agree" />
+            <label for="agree">I agree to the <a href="#" onclick="alert('Link to Terms—replace with your hosted URL')">Terms</a> and <a href="#" onclick="alert('Link to Privacy Policy—replace with your hosted URL')">Privacy Policy</a></label>
+          </div>
+        </div>
+
+        <div class="error" id="error" role="status" aria-live="polite"></div>
+
+        <p class="fineprint">We only request what we need: email and basic profile to associate your summaries. No ads, ever.</p>
+      </div>
+
+      <div class="env" id="env"></div>
+    </section>
+
+    <!-- Right side: value prop / reassurance -->
+    <aside class="art">
+      <h2 style="margin:0 0 10px">Read less. Know more.</h2>
+      <p class="muted" style="margin:0">Our extension scans Terms & Conditions and Privacy Policies, then highlights what matters: data use, auto‑renewals, cancellation, arbitration, hidden fees, and more — in plain English.</p>
+      <div class="kpis">
+        <div class="kpi"><div class="n">10×</div><div class="t">Faster to grasp</div></div>
+        <div class="kpi"><div class="n">95%</div><div class="t">Less legalese</div></div>
+        <div class="kpi"><div class="n">AES‑256</div><div class="t">Encrypted sync</div></div>
+      </div>
+      <div class="notice">Tip: On first run, your browser may ask for permission to open the sign‑in popup. Allow it so Google sign‑in can complete.</div>
+    </aside>
+  </main>
+
+  <script>
+    const qs = sel => document.querySelector(sel);
+    const googleBtn = qs('#googleBtn');
+    const agree = qs('#agree');
+    const errorEl = qs('#error');
+    const envEl = qs('#env');
+
+    const isExtension = typeof chrome !== 'undefined' && chrome?.runtime?.id;
+
+    // Show environment hint
+    envEl.textContent = isExtension ? `Extension mode • id: ${chrome.runtime.id}` : 'Preview mode (no chrome.* APIs)';
+
+    function setLoading(btn, loading) {
+      if (loading) {
+        btn.dataset.label = btn.textContent;
+        btn.innerHTML = '<span class="spinner" role="progressbar" aria-label="Loading"></span> Connecting…';
+        btn.disabled = true;
+      } else {
+        btn.innerHTML = btn.dataset.label;
+        btn.disabled = false;
+      }
+    }
+
+    function requireAgreement() {
+      if (!agree.checked) {
+        errorEl.textContent = 'Please accept the Terms and Privacy Policy to continue.';
+        return false;
+      }
+      errorEl.textContent = '';
+      return true;
+    }
+
+    async function signInWithGoogle() {
+      if (!requireAgreement()) return;
+      
+      setLoading(googleBtn, true);
+      
+      try {
+        // For now, simulate a successful login
+        await new Promise(r => setTimeout(r, 1000));
+        
+        // Store session data
+        const sessionData = {
+          user: {
+            email: 'user@example.com',
+            name: 'Demo User',
+            provider: 'google'
+          },
+          timestamp: Date.now()
+        };
+        
+        if (isExtension && chrome.storage?.local) {
+          await chrome.storage.local.set({ session: sessionData });
+        } else {
+          localStorage.setItem('session', JSON.stringify(sessionData));
+        }
+        
+        // Close the login window or redirect
+        if (isExtension) {
+          window.close();
+        } else {
+          alert('Signed in successfully! You can now close this window.');
+        }
+      } catch (error) {
+        errorEl.textContent = 'Login failed. Please try again.';
+        console.error('Login error:', error);
+      } finally {
+        setLoading(googleBtn, false);
+      }
+    }
+
+    googleBtn.addEventListener('click', signInWithGoogle);
+  </script>
+</body>
+</html>

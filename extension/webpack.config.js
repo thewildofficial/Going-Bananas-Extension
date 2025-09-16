@@ -58,6 +58,11 @@ module.exports = (env, argv) => {
         filename: 'options/options.html',
         chunks: ['options']
       }),
+      new HtmlWebpackPlugin({
+        template: './src/login/login.html',
+        filename: 'login/login.html',
+        chunks: []
+      }),
       new CopyWebpackPlugin({
         patterns: [
           {
@@ -68,6 +73,10 @@ module.exports = (env, argv) => {
             from: 'src/assets',
             to: 'assets',
             noErrorOnMissing: true
+          },
+          {
+            from: 'src/content/content.css',
+            to: 'content/content.css'
           }
         ]
       }),

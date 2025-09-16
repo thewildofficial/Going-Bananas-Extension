@@ -1,3 +1,166 @@
+import React, { useEffect, useState } from 'react';
+import { authService, User } from '@/services/authService';
+import LoginPage from '@/components/LoginPage';
+import { Popup } from './Popup';
+
+export const PopupWithAuth: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const loggedIn = await authService.isLoggedIn();
+      const currentUser = await authService.getCurrentUser();
+      setIsAuthenticated(loggedIn);
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = async (userData: User) => {
+    try {
+      await authService.login(userData);
+      setIsAuthenticated(true);
+      setUser(userData);
+    } catch (error) {
+      console.error('Error during login:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      setIsAuthenticated(false);
+      setUser(null);
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{
+        width: '400px',
+        height: '600px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#ffffff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid #f3f3f3',
+            borderTop: '3px solid #ff6b95',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            marginBottom: '16px'
+          }}></div>
+          <p style={{ color: '#666', margin: 0 }}>Loading...</p>
+        </div>
+        <style>
+          {`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}
+        </style>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{
+        width: '400px',
+        height: '600px',
+        background: '#ffffff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <LoginPage onLoginSuccess={handleLoginSuccess} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        background: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(10px)',
+        borderBottom: '1px solid #e9ecef',
+        padding: '8px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '10px',
+            color: 'white',
+            fontWeight: 'bold'
+          }}>
+            {user?.name?.charAt(0) || 'U'}
+          </div>
+          <span style={{ color: '#495057', fontWeight: '500' }}>
+            {user?.name || user?.email || 'User'}
+          </span>
+        </div>
+        <button
+          onClick={handleLogout}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#6c757d',
+            cursor: 'pointer',
+            fontSize: '11px',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = '#e9ecef';
+            e.currentTarget.style.color = '#495057';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'none';
+            e.currentTarget.style.color = '#6c757d';
+          }}
+        >
+          Logout
+        </button>
+      </div>
+      <div style={{ marginTop: '40px' }}>
+        <Popup />
+      </div>
+    </div>
+  );
+};
+<<<<<<< HEAD
 // Enhanced popup with authentication and first-time user flow
 import React, { useEffect, useState } from 'react';
 import { useAnalysis } from '@/hooks/useAnalysis';
@@ -152,10 +315,93 @@ export const PopupWithAuth: React.FC = () => {
           onSubmit={handlePersonalizationSubmit}
           onSkip={handlePersonalizationSkip}
         />
+=======
+import React, { useEffect, useState } from 'react';
+import { authService, User } from '@/services/authService';
+import LoginPage from '@/components/LoginPage';
+import { Popup } from './Popup';
+
+export const PopupWithAuth: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const loggedIn = await authService.isLoggedIn();
+      const currentUser = await authService.getCurrentUser();
+      
+      setIsAuthenticated(loggedIn);
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = async (userData: User) => {
+    try {
+      await authService.login(userData);
+      setIsAuthenticated(true);
+      setUser(userData);
+    } catch (error) {
+      console.error('Error during login:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      setIsAuthenticated(false);
+      setUser(null);
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{
+        width: '400px',
+        height: '600px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#ffffff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid #f3f3f3',
+            borderTop: '3px solid #ff6b95',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            marginBottom: '16px'
+          }}></div>
+          <p style={{ color: '#666', margin: 0 }}>Loading...</p>
+        </div>
+        <style>
+          {`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}
+        </style>
+>>>>>>> ad0c48c (feat: update login UI to match extension theme)
       </div>
     );
   }
 
+<<<<<<< HEAD
   // Show login prompt for unauthenticated users
   if (!isAuthenticated && authChecked) {
     return (
@@ -178,10 +424,22 @@ export const PopupWithAuth: React.FC = () => {
         <div className="bg-white h-full overflow-y-auto p-4">
           <LoginButton onLoginSuccess={handleLoginSuccess} />
         </div>
+=======
+  if (!isAuthenticated) {
+    return (
+      <div style={{
+        width: '400px',
+        height: '600px',
+        background: '#ffffff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <LoginPage onLoginSuccess={handleLoginSuccess} />
+>>>>>>> ad0c48c (feat: update login UI to match extension theme)
       </div>
     );
   }
 
+<<<<<<< HEAD
   // Show loading state while checking auth
   if (!authChecked) {
     return (
@@ -357,6 +615,73 @@ export const PopupWithAuth: React.FC = () => {
             )}
           </div>
         ) : null}
+=======
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* User info bar */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        background: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(10px)',
+        borderBottom: '1px solid #e9ecef',
+        padding: '8px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '10px',
+            color: 'white',
+            fontWeight: 'bold'
+          }}>
+            {user?.name?.charAt(0) || 'U'}
+          </div>
+          <span style={{ color: '#495057', fontWeight: '500' }}>
+            {user?.name || user?.email || 'User'}
+          </span>
+        </div>
+        <button
+          onClick={handleLogout}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#6c757d',
+            cursor: 'pointer',
+            fontSize: '11px',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = '#e9ecef';
+            e.currentTarget.style.color = '#495057';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'none';
+            e.currentTarget.style.color = '#6c757d';
+          }}
+        >
+          Logout
+        </button>
+      </div>
+      
+      {/* Main popup content */}
+      <div style={{ marginTop: '40px' }}>
+        <Popup />
+>>>>>>> ad0c48c (feat: update login UI to match extension theme)
       </div>
     </div>
   );

@@ -1,3 +1,85 @@
+export interface User {
+  email: string;
+  name: string;
+  provider: string;
+}
+
+export interface Session {
+  user: User;
+  timestamp: number;
+}
+
+export class AuthService {
+  private static instance: AuthService;
+  private session: Session | null = null;
+
+  private constructor() {}
+
+  static getInstance(): AuthService {
+    if (!AuthService.instance) {
+      AuthService.instance = new AuthService();
+    }
+    return AuthService.instance;
+  }
+
+  async isLoggedIn(): Promise<boolean> {
+    try {
+      const result = await chrome.storage.local.get(['session']);
+      return !!result.session;
+    } catch (error) {
+      console.error('Error checking login status:', error);
+      return false;
+    }
+  }
+
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const result = await chrome.storage.local.get(['session']);
+      return result.session?.user || null;
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      return null;
+    }
+  }
+
+  async login(user: User): Promise<void> {
+    try {
+      const session: Session = {
+        user,
+        timestamp: Date.now()
+      };
+      
+      await chrome.storage.local.set({ session });
+      this.session = session;
+    } catch (error) {
+      console.error('Error during login:', error);
+      throw error;
+    }
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await chrome.storage.local.remove(['session']);
+      this.session = null;
+    } catch (error) {
+      console.error('Error during logout:', error);
+      throw error;
+    }
+  }
+
+  async openLoginPage(): Promise<void> {
+    try {
+      const url = chrome.runtime.getURL('login/login.html');
+      await chrome.tabs.create({ url });
+    } catch (error) {
+      console.error('Error opening login page:', error);
+      throw error;
+    }
+  }
+}
+
+export const authService = AuthService.getInstance();
+<<<<<<< HEAD
 // Authentication service for Chrome extension with Supabase
 import { supabase, getCurrentSession, getUserProfile } from '@/utils/supabase';
 
@@ -224,10 +306,43 @@ class AuthService {
       return !data.user_personalization_completed;
     } catch (error) {
       console.error('Error checking first-time user status:', error);
+=======
+export interface User {
+  email: string;
+  name: string;
+  provider: string;
+}
+
+export interface Session {
+  user: User;
+  timestamp: number;
+}
+
+export class AuthService {
+  private static instance: AuthService;
+  private session: Session | null = null;
+
+  private constructor() {}
+
+  static getInstance(): AuthService {
+    if (!AuthService.instance) {
+      AuthService.instance = new AuthService();
+    }
+    return AuthService.instance;
+  }
+
+  async isLoggedIn(): Promise<boolean> {
+    try {
+      const result = await chrome.storage.local.get(['session']);
+      return !!result.session;
+    } catch (error) {
+      console.error('Error checking login status:', error);
+>>>>>>> ad0c48c (feat: update login UI to match extension theme)
       return false;
     }
   }
 
+<<<<<<< HEAD
   public async markPersonalizationCompleted(): Promise<void> {
     try {
       await chrome.storage.local.set({
@@ -236,10 +351,57 @@ class AuthService {
       });
     } catch (error) {
       console.error('Error marking personalization as completed:', error);
+=======
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const result = await chrome.storage.local.get(['session']);
+      return result.session?.user || null;
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      return null;
+    }
+  }
+
+  async login(user: User): Promise<void> {
+    try {
+      const session: Session = {
+        user,
+        timestamp: Date.now()
+      };
+      
+      await chrome.storage.local.set({ session });
+      this.session = session;
+    } catch (error) {
+      console.error('Error during login:', error);
+      throw error;
+    }
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await chrome.storage.local.remove(['session']);
+      this.session = null;
+    } catch (error) {
+      console.error('Error during logout:', error);
+      throw error;
+    }
+  }
+
+  async openLoginPage(): Promise<void> {
+    try {
+      const url = chrome.runtime.getURL('login/login.html');
+      await chrome.tabs.create({ url });
+    } catch (error) {
+      console.error('Error opening login page:', error);
+>>>>>>> ad0c48c (feat: update login UI to match extension theme)
       throw error;
     }
   }
 }
 
+<<<<<<< HEAD
 // Export singleton instance
 export const authService = new AuthService();
+=======
+export const authService = AuthService.getInstance();
+>>>>>>> ad0c48c (feat: update login UI to match extension theme)
