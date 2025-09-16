@@ -107,7 +107,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               disabled={isLoading}
               style={{
                 cursor: isLoading ? 'not-allowed' : 'pointer',
-                border: 0,
                 outline: 'none',
                 borderRadius: '16px',
                 padding: '12px 14px',

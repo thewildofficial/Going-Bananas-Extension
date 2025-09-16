@@ -41,7 +41,16 @@ router.post('/verify', async (req, res) => {
     }
 
     // Verify the token
-    const decodedToken = await supabaseService.verifyToken(token);
+    let decodedToken;
+    try {
+      decodedToken = await supabaseService.verifyToken(token);
+    } catch (e) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired token',
+        code: 'INVALID_TOKEN'
+      });
+    }
 
     // Get full user record
     const userRecord = await supabaseService.getUser(decodedToken.uid);
@@ -64,10 +73,10 @@ router.post('/verify', async (req, res) => {
 
   } catch (error) {
     logger.error('Supabase token verification failed:', error.message);
-    return res.status(401).json({
+    return res.status(500).json({
       success: false,
-      error: 'Invalid or expired token',
-      code: 'INVALID_TOKEN'
+      error: 'Authentication verification failed',
+      code: 'VERIFY_FAILED'
     });
   }
 });

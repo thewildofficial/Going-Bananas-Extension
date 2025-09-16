@@ -1,4 +1,4 @@
-import { createOAuth } from '../utils/oauth';
+// Using Supabase auth via background or direct supabase client if needed
 
 const qs = (sel: string) => document.querySelector(sel) as HTMLElement | null;
 
@@ -44,14 +44,9 @@ async function signInWithGoogle() {
       return;
     }
 
-    const oauth = createOAuth();
-    const authCode = await oauth.signIn();
-    const authData = await oauth.exchangeCodeForTokens(authCode);
-
-    await chrome.storage.local.set({
-      session: authData.session,
-      user: authData.user,
-    });
+    // Placeholder: invoke background to start Supabase OAuth or use direct flow
+    const response = await chrome.runtime.sendMessage({ type: 'SUPABASE_START_OAUTH' });
+    if (!response?.ok) throw new Error(response?.error || 'OAuth failed');
 
     window.close();
   } catch (error: any) {
