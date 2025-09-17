@@ -1,0 +1,13 @@
+<!-- Firefox Browser Icon -->
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="firefox-grad" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#ffb000"/>
+      <stop offset="100%" style="stop-color:#ff6000"/>
+    </radialGradient>
+  </defs>
+  <circle cx="12" cy="12" r="10" fill="url(#firefox-grad)"/>
+  <path d="M8 6 Q12 4 16 6 Q18 8 18 12 Q18 16 16 18 Q12 20 8 18 Q6 16 6 12 Q6 8 8 6 Z" fill="#ff3c00"/>
+  <ellipse cx="10" cy="10" rx="3" ry="2" fill="#ffb000"/>
+  <path d="M14 8 Q16 10 15 14 Q13 16 10 15" fill="#ff6000"/>
+</svg>

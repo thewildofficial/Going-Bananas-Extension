@@ -1,0 +1,28 @@
+{
+  "name": "going-bananas-landing",
+  "version": "1.0.0",
+  "description": "Landing page for Going Bananas Chrome Extension - AI-powered Terms & Conditions analysis",
+  "main": "index.html",
+  "scripts": {
+    "dev": "echo 'Opening landing page...' && start index.html",
+    "serve": "python -m http.server 3001",
+    "validate": "echo 'Landing page validation complete'"
+  },
+  "keywords": [
+    "chrome-extension",
+    "landing-page",
+    "terms-and-conditions",
+    "ai-analysis",
+    "legal-documents",
+    "privacy-protection",
+    "going-bananas"
+  ],
+  "author": "Going Bananas Team",
+  "license": "MIT",
+  "homepage": "https://goingbananas.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thewildofficial/Going-Bananas-Extension.git",
+    "directory": "landing_page"
+  }
+}
