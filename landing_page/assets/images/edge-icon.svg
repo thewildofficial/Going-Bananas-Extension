@@ -1,0 +1,13 @@
+<!-- Edge Browser Icon -->
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0078d4"/>
+      <stop offset="100%" style="stop-color:#106ebe"/>
+    </linearGradient>
+  </defs>
+  <circle cx="12" cy="12" r="10" fill="url(#edge-grad)"/>
+  <path d="M6 12 Q6 8 8 6 Q12 4 16 6 Q18 8 18 12 L12 12 Z" fill="#40e0d0"/>
+  <path d="M12 12 L18 12 Q18 16 16 18 Q12 20 8 18 Q6 16 6 12" fill="#ffffff" opacity="0.9"/>
+  <ellipse cx="12" cy="10" rx="4" ry="2" fill="#0078d4"/>
+</svg>

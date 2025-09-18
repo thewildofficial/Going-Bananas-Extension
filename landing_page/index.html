@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Going Bananas - Smart Terms & Conditions Analysis</title>
+    <meta name="description" content="Protect yourself from unfair terms and conditions with AI-powered analysis. Going Bananas extension analyzes legal documents instantly.">
+    <meta name="keywords" content="terms and conditions, legal analysis, AI, browser extension, privacy protection, legal documents">
+    
+    <meta property="og:title" content="Going Bananas - Smart Terms & Conditions Analysis">
+    <meta property="og:description" content="Protect yourself from unfair terms and conditions with AI-powered analysis.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://goingbananas.dev">
+    <meta property="og:image" content="assets/images/og-image.jpg">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Going Bananas - Smart Terms & Conditions Analysis">
+    <meta name="twitter:description" content="Protect yourself from unfair terms and conditions with AI-powered analysis.">
+    <meta name="twitter:image" content="assets/images/twitter-card.jpg">
+    
+    <link rel="icon" type="image/svg+xml" sizes="32x32" href="assets/images/favicon-32x32.svg">
+    <link rel="icon" type="image/svg+xml" sizes="16x16" href="assets/images/favicon-16x16.svg">
+    
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-icon">🍌</span>
+                <span class="logo-text">Going Bananas</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#demo" class="nav-link">Demo</a>
+                <a href="#testimonials" class="nav-link">Reviews</a>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-icon sun-icon">☀️</span>
+                    <span class="theme-icon moon-icon">🌙</span>
+                </button>
+                <a href="#download" class="nav-link nav-cta">Get Extension</a>
+            </div>
+            <div class="nav-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero" id="hero">
+        <div class="hero-background">
+            <div class="hero-gradient"></div>
+            <div class="hero-particles">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+        </div>
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        Don't Go <span class="highlight">Bananas</span> Over 
+                        <span class="gradient-text">Terms & Conditions</span>
+                    </h1>
+                    <p class="hero-description">
+                        Our AI-powered browser extension analyzes legal documents instantly, 
+                        protecting you from unfair clauses and hidden risks. Know what you're 
+                        agreeing to before it's too late.
+                    </p>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <span class="stat-number">10K+</span>
+                            <span class="stat-label">Documents Analyzed</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">95%</span>
+                            <span class="stat-label">Risk Detection Rate</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">18 Secs</span>
+                            <span class="stat-label">Average Analysis Time</span>
+                        </div>
+                    </div>
+                    <div class="hero-cta">
+                        <button class="btn btn-primary btn-large" id="hero-download-btn">
+                            <span class="btn-icon">⚡</span>
+                            Install Free Extension
+                        </button>
+                        <button class="btn btn-secondary btn-large" onclick="scrollToSection('demo')">
+                            <span class="btn-icon">▶️</span>
+                            Watch Demo
+                        </button>
+                    </div>
+                    <div class="hero-badges">
+                        <div class="badge">
+                            <span class="badge-icon">⭐</span>
+                            <span>4.9/5 Rating</span>
+                        </div>
+                        <div class="badge">
+                            <span class="badge-icon">🔒</span>
+                            <span>Privacy Focused</span>
+                        </div>
+                        <div class="badge">
+                            <span class="badge-icon">🚀</span>
+                            <span>Lightning Fast</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="extension-mockup">
+                        <div class="browser-window">
+                            <div class="browser-header">
+                                <div class="browser-controls">
+                                    <span class="control red"></span>
+                                    <span class="control yellow"></span>
+                                    <span class="control green"></span>
+                                </div>
+                                <div class="address-bar">
+                                    <span>🔒 some-phishy-website.com</span>
+                                </div>
+                            </div>
+                            <div class="browser-content">
+                                <div class="document-text">
+                                    <div class="text-line highlighted-risk">By using this service, you agree to waive all rights...</div>
+                                    <div class="text-line">Standard terms and conditions apply...</div>
+                                    <div class="text-line highlighted-warning">Company may access your personal data...</div>
+                                    <div class="text-line">Payment will be processed automatically...</div>
+                                </div>
+                                <div class="analysis-popup">
+                                    <div class="popup-header">
+                                        <span class="popup-icon">🍌</span>
+                                        <span class="popup-title">Risk Analysis</span>
+                                        <span class="risk-score high">8/10</span>
+                                    </div>
+                                    <div class="popup-content">
+                                        <div class="risk-item">
+                                            <span class="risk-icon">⚠️</span>
+                                            <span>Rights waiver clause detected</span>
+                                        </div>
+                                        <div class="risk-item">
+                                            <span class="risk-icon">🔍</span>
+                                            <span>Data collection concerns</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Why Choose Going Bananas?</h2>
+                <p class="section-description">
+                    Powerful AI analysis meets user-friendly design to keep you protected online
+                </p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3 class="feature-title">AI-Powered Analysis</h3>
+                    <p class="feature-description">
+                        Advanced machine learning algorithms analyze complex legal language 
+                        and identify potential risks in seconds.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">Instant Results</h3>
+                    <p class="feature-description">
+                        Get comprehensive risk assessments in under 30 seconds. 
+                        No more spending hours reading fine print.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3 class="feature-title">Smart Highlighting</h3>
+                    <p class="feature-description">
+                        Problematic clauses are automatically highlighted and explained 
+                        in plain English you can understand.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3 class="feature-title">Privacy First</h3>
+                    <p class="feature-description">
+                        Your data stays private. Analysis happens securely without 
+                        storing or sharing your personal information.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3 class="feature-title">Risk Scoring</h3>
+                    <p class="feature-description">
+                        Clear risk scores from 1-10 help you make informed decisions 
+                        about what you're agreeing to.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🌍</div>
+                    <h3 class="feature-title">Universal Compatibility</h3>
+                    <p class="feature-description">
+                        Works on any website with terms and conditions. 
+                        Chrome, Edge, Firefox support coming soon.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="demo" id="demo">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">See It In Action</h2>
+                <p class="section-description">
+                    Watch how Going Bananas protects you from risky terms and conditions
+                </p>
+            </div>
+            <div class="demo-content">
+                <div class="demo-video">
+                    <div class="video-placeholder">
+                        <div class="play-button">
+                            <span class="play-icon">▶️</span>
+                        </div>
+                        <div class="video-overlay">
+                            <h3>Extension Demo</h3>
+                            <p>See real-time analysis in action</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="demo-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>Install Extension</h4>
+                            <p>Add Going Bananas to your browser in one click</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Visit Any Site</h4>
+                            <p>Browse normally - we'll detect terms automatically</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Get Instant Analysis</h4>
+                            <p>See risk scores and explanations in real-time</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="testimonials" id="testimonials">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">What Users Say</h2>
+                <p class="section-description">
+                    Join thousands of users who trust Going Bananas to protect them online
+                </p>
+            </div>
+            <div class="testimonials-grid">
+                <div class="testimonial-card">
+                    <div class="testimonial-rating">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">
+                        "This extension saved me from agreeing to a service that would have 
+                        charged hidden fees. The AI caught what I missed!"
+                    </p>
+                    <div class="testimonial-author">
+                        <img src="assets/images/avatar-1.svg" alt="Sarah J." class="author-avatar">
+                        <div class="author-info">
+                            <span class="author-name">Sarah J.</span>
+                            <span class="author-role">Small Business Owner</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-rating">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">
+                        "Finally, someone made reading terms and conditions bearable. 
+                        The risk scoring is incredibly accurate and helpful."
+                    </p>
+                    <div class="testimonial-author">
+                        <img src="assets/images/avatar-2.svg" alt="Mike R." class="author-avatar">
+                        <div class="author-info">
+                            <span class="author-name">Mike R.</span>
+                            <span class="author-role">Software Developer</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-rating">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">
+                        "As a lawyer, I appreciate how accurately this tool identifies 
+                        problematic clauses. It's like having a legal assistant."
+                    </p>
+                    <div class="testimonial-author">
+                        <img src="assets/images/avatar-3.svg" alt="Jessica L." class="author-avatar">
+                        <div class="author-info">
+                            <span class="author-name">Jessica L.</span>
+                            <span class="author-role">Legal Professional</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="download" id="download">
+        <div class="container">
+            <div class="download-content">
+                <div class="download-text">
+                    <h2 class="download-title">Ready to Stop Going Bananas?</h2>
+                    <p class="download-description">
+                        Install the Going Bananas extension today and never worry about 
+                        unfair terms and conditions again. It's free, secure, and takes 
+                        less than 30 seconds to set up.
+                    </p>
+                    <div class="download-features">
+                        <div class="download-feature">
+                            <span class="feature-check">✅</span>
+                            <span>100% Free Forever</span>
+                        </div>
+                        <div class="download-feature">
+                            <span class="feature-check">✅</span>
+                            <span>No Registration Required</span>
+                        </div>
+                        <div class="download-feature">
+                            <span class="feature-check">✅</span>
+                            <span>Works on All Websites</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="download-buttons">
+                    <button class="btn btn-primary btn-xl" id="main-download-btn">
+                        <img src="assets/images/chrome-icon.svg" alt="Chrome" class="browser-icon">
+                        Install for Chrome
+                    </button>
+                    <button class="btn btn-outline btn-large" id="firefox-download-btn" disabled>
+                        <img src="assets/images/firefox-icon.svg" alt="Firefox" class="browser-icon">
+                        Firefox (Coming Soon)
+                    </button>
+                    <button class="btn btn-outline btn-large" id="edge-download-btn" disabled>
+                        <img src="assets/images/edge-icon.svg" alt="Edge" class="browser-icon">
+                        Edge (Coming Soon)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="footer-logo">
+                        <span class="logo-icon">🍌</span>
+                        <span class="logo-text">Going Bananas</span>
+                    </div>
+                    <p class="footer-description">
+                        Protecting users from unfair terms and conditions with AI-powered analysis.
+                    </p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Product</h4>
+                        <a href="#features">Features</a>
+                        <a href="#demo">Demo</a>
+                        <a href="#download">Download</a>
+                        <a href="/privacy">Privacy Policy</a>
+                    </div>
+                    <div class="footer-column">
+                        <h4>Support</h4>
+                        <a href="/help">Help Center</a>
+                        <a href="/contact">Contact</a>
+                        <a href="/faq">FAQ</a>
+                        <a href="/feedback">Feedback</a>
+                    </div>
+                    <div class="footer-column">
+                        <h4>Company</h4>
+                        <a href="/about">About</a>
+                        <a href="/blog">Blog</a>
+                        <a href="/careers">Careers</a>
+                        <a href="/press">Press</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Going Bananas. All rights reserved.</p>
+                <div class="social-links">
+                    <a href="#" class="social-link">🐦</a>
+                    <a href="#" class="social-link">📘</a>
+                    <a href="#" class="social-link">💼</a>
+                    <a href="#" class="social-link">📧</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
