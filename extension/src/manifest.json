@@ -13,12 +13,12 @@
   ],
   "host_permissions": [
     "http://localhost:3000/*",
-    "http://localhost:3001/*",
+    "http://localhost:3000/*",
     "https://api.goingbananas.dev/*",
     "https://*.supabase.co/*",
     "https://accounts.google.com/*"
   ],
-  
+
   "background": {
     "service_worker": "background/background.js"
   },
@@ -27,6 +27,11 @@
       "matches": ["<all_urls>"],
       "js": ["content/content.js"],
       "css": ["content/content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://localhost:3000/*"],
+      "js": ["content/oauth-bridge/content/oauth-bridge.js"],
       "run_at": "document_idle"
     }
   ],

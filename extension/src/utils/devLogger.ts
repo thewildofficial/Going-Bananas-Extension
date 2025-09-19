@@ -41,7 +41,7 @@ class DevLogger {
   private async sendLogsToBackend(logs: LogEntry[]): Promise<void> {
     try {
       const apiUrl = await this.getApiUrl();
-      const endpoint = `${apiUrl}/dev/logs`;
+      const endpoint = `${apiUrl}/config/dev/logs`;
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

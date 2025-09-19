@@ -13,7 +13,7 @@ interface AnalysisData {
 }
 
 class BackgroundService {
-  private mockApiUrl = 'http://localhost:3001/api';
+  private mockApiUrl = 'http://localhost:3000/api';
   
 
   constructor() {
@@ -50,6 +50,39 @@ class BackgroundService {
   ): Promise<void> {
     try {
       switch (message.action) {
+        case 'OAUTH_SESSION_CREATED':
+        case 'OAUTH_SESSION_FOUND':
+          console.log('🎉 Processing OAuth session data');
+          const sessionData = (message as any).sessionData;
+          
+          if (sessionData && sessionData.user) {
+            // Store session in Chrome extension storage
+            await chrome.storage.local.set({
+              session: {
+                user: sessionData.user,
+                timestamp: Date.now()
+              },
+              tokens: sessionData.tokens,
+              needsOnboarding: true
+            });
+            
+            console.log('✅ OAuth session stored in extension');
+            sendResponse({ success: true, message: 'Session stored' });
+            
+            // Optionally open onboarding
+            try {
+              const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
+              await chrome.tabs.create({ url: onboardingUrl });
+            } catch (error) {
+              console.log('Could not auto-open onboarding:', error);
+            }
+            
+            return;
+          } else {
+            sendResponse({ success: false, message: 'Invalid session data' });
+            return;
+          }
+
         case 'analyzeTermsText':
           const analysis = await this.analyzeTermsText(message.data);
           sendResponse({

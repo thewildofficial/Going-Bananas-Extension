@@ -2,14 +2,27 @@
 import React, { useState, useEffect } from 'react';
 import { getSettings, saveSettings } from '@/utils/chrome';
 import { ExtensionSettings } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
 
 export const Options: React.FC = () => {
+  const { isAuthenticated, user, signOut } = useAuth();
   const [settings, setSettings] = useState<ExtensionSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [showApiKey, setShowApiKey] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // Show a brief success message or redirect
+      alert('Signed out successfully. You can now sign in again to reset your personalization.');
+    } catch (error) {
+      console.error('Logout error:', error);
+      alert('Failed to sign out. Please try again.');
+    }
+  };
 
   useEffect(() => {
     loadSettings();
@@ -531,7 +544,42 @@ export const Options: React.FC = () => {
           <span style={bananaIconStyle}>🍌</span>
           <h1 style={titleStyle}>Going Bananas Settings</h1>
         </div>
-        <div style={versionStyle}>v1.0.0</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {isAuthenticated && user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', color: '#6b7280' }}>
+                Signed in as {user.name || user.email}
+              </span>
+              <button
+                onClick={handleLogout}
+                style={{
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+                }}
+                title="Sign out and clear all personalization data"
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+          <div style={versionStyle}>v1.0.0</div>
+        </div>
       </header>
 
       {/* Navigation Tabs */}
@@ -635,7 +683,7 @@ export const Options: React.FC = () => {
                 >
                   <option value="production">Production (api.goingbananas.dev)</option>
                   <option value="local">Local Development (localhost:3000)</option>
-                  <option value="mock">Mock API (localhost:3001)</option>
+                  <option value="mock">Mock API (localhost:3000)</option>
                 </select>
               </div>
             </div>

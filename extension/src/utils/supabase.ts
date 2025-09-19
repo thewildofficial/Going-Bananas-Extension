@@ -121,24 +121,36 @@ export const signInWithGoogle = async () => {
   try {
     devLog.info('Starting Google sign-in process...');
     const client = await getSupabaseClient();
-    const redirectURL = chrome.identity.getRedirectURL();
+    
+    // Use the backend OAuth success endpoint as fallback
+    const backendOAuthUrl = 'http://localhost:3000/oauth/success';
+    const chromeExtensionRedirectURL = chrome.identity.getRedirectURL();
+    
+    devLog.info('🔗 Chrome extension redirect URL:', chromeExtensionRedirectURL);
+    devLog.info('🔗 Backend OAuth success URL:', backendOAuthUrl);
+    
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: redirectURL,
+        redirectTo: backendOAuthUrl, // Use backend endpoint for now
         queryParams: { access_type: 'offline', prompt: 'consent' },
         skipBrowserRedirect: true
       }
     });
+    
     if (error) {
       devLog.error('Supabase OAuth error', formatErrorDetails(error));
       throw new Error(`Supabase OAuth failed: ${error.message}`);
     }
+    
     if (!data || !data.url) {
       devLog.error('No OAuth URL received from Supabase');
       throw new Error('No OAuth URL received from Supabase');
     }
-    devLog.info('OAuth URL generated', data.url);
+    
+    devLog.info('🎯 OAuth URL generated successfully:', data.url);
+    devLog.info('🔍 OAuth URL should redirect to:', backendOAuthUrl);
+    
     return { data, error };
   } catch (error) {
     devLog.error('Failed to initiate Google sign-in', formatErrorDetails(error));

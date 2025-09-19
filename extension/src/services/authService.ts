@@ -62,9 +62,16 @@ export class AuthService {
 
   async logout(): Promise<void> {
     try {
-      await chrome.storage.local.remove(['session']);
+      // Clear session and all onboarding/personalization data
+      await chrome.storage.local.remove([
+        'session', 
+        'needsOnboarding',
+        'personalizationCompleted',
+        'personalizationCompletedAt',
+        'computedProfile'
+      ]);
       this.session = null;
-      devLog.info('User logged out successfully');
+      devLog.info('User logged out successfully - all data cleared');
     } catch (error) {
       devLog.error('Error during logout:', error);
       throw error;

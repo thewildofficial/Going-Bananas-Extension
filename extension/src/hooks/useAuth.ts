@@ -29,11 +29,42 @@ export const useAuth = () => {
     const loadSession = async () => {
       try {
         devLog.debug('Loading auth session from storage');
-        const result = await chrome.storage.local.get(['session']);
+        
+        // Check for existing Chrome extension session
+        const result = await chrome.storage.local.get(['session', 'needsOnboarding']);
         const session = result.session as { user: ServiceUser } | undefined;
-        const mappedUser = mapServiceUserToTypesUser(session?.user || null);
+        const needsOnboarding = result.needsOnboarding;
+        
+        if (session?.user) {
+          devLog.info('✅ Found existing session for user:', session.user.email);
+          const mappedUser = mapServiceUserToTypesUser(session.user);
+          
+          if (!isMounted) return;
+          setState({ isAuthenticated: true, user: mappedUser, loading: false });
+          
+          // Auto-redirect to onboarding if needed
+          if (needsOnboarding) {
+            devLog.info('🚀 User needs onboarding, redirecting...');
+            setTimeout(async () => {
+              try {
+                const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
+                await chrome.tabs.create({ url: onboardingUrl });
+                // Clear the onboarding flag
+                await chrome.storage.local.remove(['needsOnboarding']);
+              } catch (error) {
+                devLog.error('Failed to open onboarding:', error);
+              }
+            }, 1000);
+          }
+          
+          return;
+        }
+        
+        // No session found
+        devLog.debug('No existing session found');
         if (!isMounted) return;
-        setState({ isAuthenticated: Boolean(session?.user), user: mappedUser, loading: false });
+        setState({ isAuthenticated: false, user: null, loading: false });
+        
       } catch (error) {
         devLog.error('Failed to load auth session', { error });
         if (!isMounted) return;

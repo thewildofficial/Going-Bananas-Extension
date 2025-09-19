@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Login Successful - Going Bananas</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      color: #1a1a1a;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      max-width: 500px;
+      text-align: center;
+    }
+    .title {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      font-size: 18px;
+      margin-bottom: 24px;
+      color: #4a5568;
+      font-weight: 500;
+    }
+    .success-message {
+      background: #f0fff4;
+      border: 2px solid #68d391;
+      color: #2f855a;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 16px;
+      margin-bottom: 24px;
+      font-weight: 500;
+    }
+    .instructions {
+      font-size: 16px;
+      color: #718096;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+    .steps {
+      text-align: left;
+      font-size: 15px;
+      color: #4a5568;
+      line-height: 1.8;
+      margin-bottom: 24px;
+      background: #f7fafc;
+      padding: 20px;
+      border-radius: 12px;
+      border-left: 4px solid #ff9a56;
+    }
+    .step {
+      margin-bottom: 12px;
+      padding: 8px 0;
+    }
+    .step strong {
+      color: #2d3748;
+    }
+    .button {
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 8px;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(255, 154, 86, 0.3);
+    }
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 154, 86, 0.4);
+    }
+    .button.secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .button.secondary:hover {
+      background: #cbd5e0;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    }
+    .extension-icon {
+      width: 24px;
+      height: 24px;
+      background: #ff9a56;
+      border-radius: 6px;
+      display: inline-block;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">🎉 Welcome to Going Bananas!</div>
+    <div class="subtitle">Your account has been successfully created</div>
+    
+    <div class="success-message">
+      ✅ Authentication completed successfully! Now let's set up your personalized experience.
+    </div>
+    
+    <div class="instructions">To continue with your personalization setup:</div>
+    <div class="steps">
+      <div class="step">
+        <strong>Step 1:</strong> Look for the Going Bananas extension icon <span class="extension-icon"></span> in your browser's toolbar (usually in the top right)
+      </div>
+      <div class="step">
+        <strong>Step 2:</strong> Click on the extension icon to open the popup
+      </div>
+      <div class="step">
+        <strong>Step 3:</strong> You should now see the personalization setup form
+      </div>
+      <div class="step">
+        <strong>Step 4:</strong> Complete the quick 4-step setup to customize your experience
+      </div>
+    </div>
+    
+    <button class="button" onclick="tryOpenExtension()">
+      🚀 Continue to Setup
+    </button>
+    <button class="button secondary" onclick="window.close()">
+      Close This Tab
+    </button>
+    
+    <div id="status" style="display: none; margin-top: 20px; padding: 12px; border-radius: 8px;"></div>
+  </div>
+
+  <script>
+    console.log('🎯 OAuth redirect page loaded successfully');
+
+    function tryOpenExtension() {
+      const status = document.getElementById('status');
+      status.style.display = 'block';
+      status.style.background = '#e6fffa';
+      status.style.border = '1px solid #38b2ac';
+      status.style.color = '#2c7a7b';
+      status.innerHTML = '👆 Please click the Going Bananas extension icon in your browser toolbar to continue with your personalization setup.';
+      
+      // Try to signal to the extension that login was successful
+      try {
+        localStorage.setItem('goingBananas_loginSuccess', 'true');
+        localStorage.setItem('goingBananas_loginTimestamp', Date.now().toString());
+        console.log('✅ Login success signal stored for extension');
+      } catch (error) {
+        console.error('Could not store login success signal:', error);
+      }
+    }
+
+    // Auto-run setup when page loads
+    window.addEventListener('load', () => {
+      console.log('🚀 Page loaded, processing OAuth success');
+      
+      // Store login success for extension to pick up
+      try {
+        localStorage.setItem('goingBananas_loginSuccess', 'true');
+        localStorage.setItem('goingBananas_loginTimestamp', Date.now().toString());
+        console.log('✅ Login success automatically stored');
+      } catch (error) {
+        console.error('❌ Failed to store login success:', error);
+      }
+      
+      // Show a message after a short delay
+      setTimeout(() => {
+        const container = document.querySelector('.container');
+        if (container) {
+          container.style.animation = 'pulse 2s infinite';
+        }
+      }, 2000);
+    });
+  </script>
+</body>
+</html>

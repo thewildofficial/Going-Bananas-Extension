@@ -174,9 +174,36 @@ async function handleOAuthSuccess(tokens) {
       await chrome.storage.local.set({ session: sessionData });
       devLog.info('Stored session in Chrome storage', { email: sessionData.user.email });
 
+      // Check if this is a first-time user and if personalization is needed
+      const storage = await chrome.storage.local.get(['first_time_user', 'personalizationCompleted']);
+      const isFirstTime = storage.first_time_user !== false; // Default to true for new users
+      const hasCompletedPersonalization = storage.personalizationCompleted === true;
+
+      if (isFirstTime || !hasCompletedPersonalization) {
+        devLog.info('🎊 First-time user detected - redirecting to personalization onboarding');
+        
+        if (errorEl) {
+          errorEl.style.color = '#10b981';
+          errorEl.textContent = `Welcome ${sessionData.user.name}! Setting up your personalized experience...`;
+        }
+
+        // Mark that this is no longer a first-time user
+        await chrome.storage.local.set({ first_time_user: false });
+
+        // Redirect to onboarding instead of closing
+        setTimeout(() => {
+          const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
+          chrome.tabs.create({ url: onboardingUrl });
+          window.close();
+        }, 1000);
+        
+        return;
+      }
+
+      // Existing user with completed personalization
       if (errorEl) {
         errorEl.style.color = '#10b981';
-        errorEl.textContent = `Login successful! Welcome ${sessionData.user.name}. You can close this page.`;
+        errorEl.textContent = `Login successful! Welcome back ${sessionData.user.name}. You can close this page.`;
       }
 
       devLog.info('🎉 Login flow completed successfully - closing window');
@@ -202,6 +229,14 @@ function handleOAuthError(errorMessage) {
 // Set up event listener when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   initEnvironment();
+  
+  // Check if we're on a redirect page with tokens in the URL
+  const isExtension = isRunningAsExtension();
+  if (!isExtension && window.location.hash) {
+    handleDirectOAuthRedirect();
+    return;
+  }
+  
   if (googleBtn) {
     googleBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -209,3 +244,101 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// Handle direct OAuth redirect (when opened in browser tab)
+async function handleDirectOAuthRedirect() {
+  devLog.info('🔗 Handling direct OAuth redirect from browser tab');
+  
+  try {
+    const fragment = window.location.hash.substring(1);
+    const params = new URLSearchParams(fragment);
+    const access_token = params.get('access_token');
+    const refresh_token = params.get('refresh_token');
+    const expires_in = params.get('expires_in');
+
+    if (access_token) {
+      devLog.info('✅ Found access token in URL, processing...');
+      
+      // Show processing message
+      if (errorEl) {
+        errorEl.style.color = '#10b981';
+        errorEl.textContent = 'Processing login... Please wait.';
+      }
+      
+      // Create Chrome extension tab with the tokens
+      const extensionId = 'YOUR_EXTENSION_ID'; // This would be dynamically determined
+      const onboardingUrl = `chrome-extension://${extensionId}/onboarding/onboarding.html`;
+      
+      // Store tokens in a way that can be accessed by the extension
+      const tokenData = {
+        access_token,
+        refresh_token,
+        expires_in,
+        timestamp: Date.now()
+      };
+      
+      // Try to communicate with extension or open extension pages
+      devLog.info('🚀 Redirecting to personalization onboarding...');
+      
+      // Create a message to show the user
+      document.body.innerHTML = `
+        <div style="
+          display: flex; 
+          flex-direction: column; 
+          align-items: center; 
+          justify-content: center; 
+          min-height: 100vh; 
+          font-family: system-ui; 
+          background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+          color: white;
+          text-align: center;
+          padding: 20px;
+        ">
+          <div style="
+            background: white; 
+            color: #1a1a1a; 
+            padding: 40px; 
+            border-radius: 20px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            max-width: 400px;
+          ">
+            <div style="font-size: 24px; font-weight: 600; margin-bottom: 16px;">
+              🎉 Login Successful!
+            </div>
+            <div style="font-size: 16px; margin-bottom: 24px; color: #4a5568;">
+              Welcome Malay Patel! Let's set up your personalized experience.
+            </div>
+            <div style="font-size: 14px; color: #718096; margin-bottom: 20px;">
+              Please follow these steps to complete your setup:
+            </div>
+            <ol style="text-align: left; font-size: 14px; color: #4a5568; line-height: 1.6;">
+              <li>Open the Going Bananas extension popup</li>
+              <li>Click the "Sign in" button if you see it</li>
+              <li>You'll be automatically taken to the personalization setup</li>
+            </ol>
+            <button onclick="window.close()" style="
+              background: #ff6b95; 
+              color: white; 
+              border: none; 
+              padding: 12px 24px; 
+              border-radius: 8px; 
+              font-weight: 600; 
+              cursor: pointer;
+              margin-top: 20px;
+            ">
+              Close This Tab
+            </button>
+          </div>
+        </div>
+      `;
+      
+    } else {
+      devLog.error('❌ No access token found in URL redirect');
+      handleOAuthError('No access token found in redirect. Please try logging in again.');
+    }
+    
+  } catch (error) {
+    devLog.error('❌ Error handling direct OAuth redirect', { error });
+    handleOAuthError('Failed to process login redirect. Please try again.');
+  }
+}

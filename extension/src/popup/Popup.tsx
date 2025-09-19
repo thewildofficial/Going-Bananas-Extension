@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { LoginButton } from '@/components/LoginButton';
 
 export const Popup: React.FC = () => {
-  const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const { isAuthenticated, loading: authLoading, user, signOut } = useAuth();
   const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null);
   const [pageStatus, setPageStatus] = useState<'loading' | 'analyzing' | 'complete' | 'error' | 'no-terms'>('loading');
   const [analysis, setAnalysis] = useState<any>(null);
@@ -15,6 +15,16 @@ export const Popup: React.FC = () => {
   const [selectedBlocks, setSelectedBlocks] = useState<Array<{id: string, text: string, element: string}>>([]);
   const [notification, setNotification] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
   const [cachedAnalysis, setCachedAnalysis] = useState<boolean>(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      setNotification({ type: 'info', message: 'Signed out successfully' });
+    } catch (error) {
+      console.error('Logout error:', error);
+      setNotification({ type: 'error', message: 'Failed to sign out' });
+    }
+  };
 
   useEffect(() => {
     initializePopup();
@@ -735,9 +745,29 @@ export const Popup: React.FC = () => {
             {authLoading ? (
               <span style={{ fontSize: '12px', opacity: 0.8 }}>Checking sign-in…</span>
             ) : isAuthenticated ? (
-              <span style={{ fontSize: '12px', opacity: 0.9 }}>
-                {user?.name || user?.email?.split('@')[0]}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '12px', opacity: 0.9 }}>
+                  {user?.name || user?.email?.split('@')[0]}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#dc3545',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    borderRadius: '3px',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = '#fff5f5'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'none'}
+                  title="Sign out and clear all data"
+                >
+                  Sign out
+                </button>
+              </div>
             ) : (
               <LoginButton variant="compact" />
             )}
@@ -778,7 +808,7 @@ export const Popup: React.FC = () => {
             <p style={{ margin: 0, fontSize: '13px', color: '#9b2c2c' }}>
               Sign in to personalize your analysis and sync settings.
             </p>
-            <LoginButton variant="compact" />
+            {/* LoginButton removed from here to avoid duplicate - main one is in header */}
           </div>
         </div>
       )}
