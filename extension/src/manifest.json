@@ -6,11 +6,17 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "identity",
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
     "http://localhost:3000/*",
-    "https://api.goingbananas.dev/*"
+    "http://localhost:3001/*",
+    "https://api.goingbananas.dev/*",
+    "https://*.supabase.co/*",
+    "https://accounts.google.com/*"
   ],
   
   "background": {

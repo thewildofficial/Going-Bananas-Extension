@@ -17,6 +17,7 @@ const rateLimitMiddleware = require('./middleware/rateLimit');
 const analyzeRoutes = require('./routes/analyze');
 const healthRoutes = require('./routes/health');
 const personalizationRoutes = require('./routes/personalization');
+const configRoutes = require('./routes/config');
 const WebSocketService = require('./services/webSocketService');
 
 class Server {
@@ -80,6 +81,9 @@ class Server {
     // Personalization routes
     this.app.use('/api/personalization', personalizationRoutes);
 
+    // Configuration routes
+    this.app.use('/api/config', configRoutes);
+
     // Root route
     this.app.get('/', (req, res) => {
       res.json({
@@ -90,6 +94,7 @@ class Server {
           health: '/api/health',
           analyze: '/api/analyze',
           personalization: '/api/personalization',
+          config: '/api/config',
           websocket: 'ws://localhost:3000/ws'
         },
         documentation: 'https://github.com/goingbananas/extension/blob/main/docs/API.md'
@@ -104,7 +109,9 @@ class Server {
         available_endpoints: [
           'GET /api/health',
           'POST /api/analyze',
-          'GET|POST|PATCH|DELETE /api/personalization'
+          'GET|POST|PATCH|DELETE /api/personalization',
+          'GET /api/config/supabase',
+          'POST /api/dev/logs'
         ]
       });
     });
@@ -198,6 +205,8 @@ class Server {
           `GET http://localhost:${this.port}/api/health`,
           `POST http://localhost:${this.port}/api/analyze`,
           `GET|POST|PATCH|DELETE http://localhost:${this.port}/api/personalization`,
+          `GET http://localhost:${this.port}/api/config/supabase`,
+          `POST http://localhost:${this.port}/api/dev/logs`,
           `WebSocket ws://localhost:${this.port}/ws`
         ]
       });

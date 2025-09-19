@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Settings, RefreshCw, Search, Share, Edit3 } from 'lucide-react';
 import { getApiUrl } from '@/utils/config';
 import { renderMarkdownText } from '@/utils/markdown';
+import { useAuth } from '@/hooks/useAuth';
+import { LoginButton } from '@/components/LoginButton';
 
 export const Popup: React.FC = () => {
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
   const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null);
   const [pageStatus, setPageStatus] = useState<'loading' | 'analyzing' | 'complete' | 'error' | 'no-terms'>('loading');
   const [analysis, setAnalysis] = useState<any>(null);
@@ -727,6 +730,18 @@ export const Popup: React.FC = () => {
           <h1 style={titleStyle}>Going Bananas</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Auth area */}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {authLoading ? (
+              <span style={{ fontSize: '12px', opacity: 0.8 }}>Checking sign-in…</span>
+            ) : isAuthenticated ? (
+              <span style={{ fontSize: '12px', opacity: 0.9 }}>
+                {user?.name || user?.email?.split('@')[0]}
+              </span>
+            ) : (
+              <LoginButton variant="compact" />
+            )}
+          </div>
           {pageStatus === 'complete' && (
             <button
               onClick={refreshAnalysis}
@@ -755,6 +770,18 @@ export const Popup: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* If not signed in, show login prompt */}
+      {!authLoading && !isAuthenticated && (
+        <div style={{ padding: '16px', background: '#fff7fb', borderBottom: '1px solid #fbe3ef' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#9b2c2c' }}>
+              Sign in to personalize your analysis and sync settings.
+            </p>
+            <LoginButton variant="compact" />
+          </div>
+        </div>
+      )}
 
       {/* Toolbar Status */}
       {toolbarActive && (
