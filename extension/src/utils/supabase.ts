@@ -122,17 +122,15 @@ export const signInWithGoogle = async () => {
     devLog.info('Starting Google sign-in process...');
     const client = await getSupabaseClient();
     
-    // Use the backend OAuth success endpoint as fallback
-    const backendOAuthUrl = 'http://localhost:3000/oauth/success';
-    const chromeExtensionRedirectURL = chrome.identity.getRedirectURL();
+    // Use Chrome extension redirect URL for seamless flow
+    const redirectUrl = chrome.identity.getRedirectURL();
     
-    devLog.info('🔗 Chrome extension redirect URL:', chromeExtensionRedirectURL);
-    devLog.info('🔗 Backend OAuth success URL:', backendOAuthUrl);
+    devLog.info('🔗 Chrome extension redirect URL:', redirectUrl);
     
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: backendOAuthUrl, // Use backend endpoint for now
+        redirectTo: redirectUrl,
         queryParams: { access_type: 'offline', prompt: 'consent' },
         skipBrowserRedirect: true
       }
@@ -149,9 +147,53 @@ export const signInWithGoogle = async () => {
     }
     
     devLog.info('🎯 OAuth URL generated successfully:', data.url);
-    devLog.info('🔍 OAuth URL should redirect to:', backendOAuthUrl);
     
-    return { data, error };
+    // Use Chrome identity API to launch OAuth in same tab
+    return new Promise((resolve, reject) => {
+      chrome.identity.launchWebAuthFlow({
+        url: data.url,
+        interactive: true
+      }, (responseUrl) => {
+        if (chrome.runtime.lastError) {
+          devLog.error('Chrome identity error:', chrome.runtime.lastError);
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        
+        if (!responseUrl) {
+          reject(new Error('No response URL received from OAuth'));
+          return;
+        }
+        
+        devLog.info('✅ OAuth completed successfully:', responseUrl);
+        
+        // Extract tokens from URL fragment
+        const url = new URL(responseUrl);
+        const fragment = url.hash.substring(1);
+        const params = new URLSearchParams(fragment);
+        
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        const expiresIn = params.get('expires_in');
+        
+        if (!accessToken) {
+          reject(new Error('No access token received'));
+          return;
+        }
+        
+        resolve({
+          data: {
+            session: {
+              access_token: accessToken,
+              refresh_token: refreshToken,
+              expires_in: parseInt(expiresIn || '3600')
+            }
+          },
+          error: null
+        });
+      });
+    });
+    
   } catch (error) {
     devLog.error('Failed to initiate Google sign-in', formatErrorDetails(error));
     throw error;

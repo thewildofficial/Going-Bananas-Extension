@@ -127,9 +127,17 @@ async function handleGoogleSignIn() {
           handleOAuthError('Failed to complete authentication');
         }
       });
+    } else if (data?.session) {
+      devLog.info('✅ OAuth session received directly, processing tokens...');
+      const tokens = {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        expires_in: data.session.expires_in
+      };
+      await handleOAuthSuccess(tokens);
     } else {
-      devLog.error('No OAuth URL received from Supabase', { data, error });
-      throw new Error('No OAuth URL received from Supabase');
+      devLog.error('No OAuth session or URL received from Supabase', { data, error });
+      throw new Error('No OAuth session or URL received from Supabase');
     }
   } catch (error) {
     devLog.error('Login error:', error);
@@ -163,7 +171,11 @@ async function handleOAuthSuccess(tokens) {
       const sessionData = {
         user: {
           email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || 'User',
+          name: user.user_metadata?.full_name || 
+                user.user_metadata?.name || 
+                user.user_metadata?.display_name ||
+                user.email?.split('@')[0] || 
+                'User',
           provider: 'google',
           avatar: user.user_metadata?.avatar_url
         },
@@ -190,11 +202,10 @@ async function handleOAuthSuccess(tokens) {
         // Mark that this is no longer a first-time user
         await chrome.storage.local.set({ first_time_user: false });
 
-        // Redirect to onboarding instead of closing
+        // Redirect to onboarding in same tab
         setTimeout(() => {
           const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
-          chrome.tabs.create({ url: onboardingUrl });
-          window.close();
+          window.location.href = onboardingUrl;
         }, 1000);
         
         return;
@@ -203,11 +214,14 @@ async function handleOAuthSuccess(tokens) {
       // Existing user with completed personalization
       if (errorEl) {
         errorEl.style.color = '#10b981';
-        errorEl.textContent = `Login successful! Welcome back ${sessionData.user.name}. You can close this page.`;
+        errorEl.textContent = `Login successful! Welcome back ${sessionData.user.name}. Redirecting to extension...`;
       }
 
-      devLog.info('🎉 Login flow completed successfully - closing window');
-      setTimeout(() => { window.close(); }, 800);
+      devLog.info('🎉 Login flow completed successfully - redirecting to extension');
+      setTimeout(() => { 
+        // Close the login tab and let user use the extension popup
+        window.close();
+      }, 1500);
     } else {
       devLog.error('Session or user not available after authentication');
       handleOAuthError('Authentication incomplete. Please try again.');

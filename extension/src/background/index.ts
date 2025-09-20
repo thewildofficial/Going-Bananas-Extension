@@ -37,8 +37,9 @@ class BackgroundService {
 
   private handleInstallation(details: chrome.runtime.InstalledDetails): void {
     if (details.reason === 'install') {
+      // Open login page instead of options page
       chrome.tabs.create({
-        url: chrome.runtime.getURL('options/options.html')
+        url: chrome.runtime.getURL('login/login.html')
       });
     }
   }
@@ -56,6 +57,10 @@ class BackgroundService {
           const sessionData = (message as any).sessionData;
           
           if (sessionData && sessionData.user) {
+            // Check if user has already completed personalization
+            const existingData = await chrome.storage.local.get(['personalizationCompleted']);
+            const needsOnboarding = !existingData.personalizationCompleted;
+            
             // Store session in Chrome extension storage
             await chrome.storage.local.set({
               session: {
@@ -63,19 +68,14 @@ class BackgroundService {
                 timestamp: Date.now()
               },
               tokens: sessionData.tokens,
-              needsOnboarding: true
+              needsOnboarding: needsOnboarding
             });
             
-            console.log('✅ OAuth session stored in extension');
-            sendResponse({ success: true, message: 'Session stored' });
+            console.log('✅ OAuth session stored in extension', { needsOnboarding });
+            sendResponse({ success: true, message: 'Session stored', needsOnboarding });
             
-            // Optionally open onboarding
-            try {
-              const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
-              await chrome.tabs.create({ url: onboardingUrl });
-            } catch (error) {
-              console.log('Could not auto-open onboarding:', error);
-            }
+            // Don't auto-open onboarding - let the login page handle the flow
+            // The login page will redirect to onboarding in the same tab if needed
             
             return;
           } else {

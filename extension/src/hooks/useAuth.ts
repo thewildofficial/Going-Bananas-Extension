@@ -42,20 +42,8 @@ export const useAuth = () => {
           if (!isMounted) return;
           setState({ isAuthenticated: true, user: mappedUser, loading: false });
           
-          // Auto-redirect to onboarding if needed
-          if (needsOnboarding) {
-            devLog.info('🚀 User needs onboarding, redirecting...');
-            setTimeout(async () => {
-              try {
-                const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
-                await chrome.tabs.create({ url: onboardingUrl });
-                // Clear the onboarding flag
-                await chrome.storage.local.remove(['needsOnboarding']);
-              } catch (error) {
-                devLog.error('Failed to open onboarding:', error);
-              }
-            }, 1000);
-          }
+          // Don't auto-redirect to onboarding - let the login flow handle it
+          // The login page will redirect to onboarding in the same tab if needed
           
           return;
         }

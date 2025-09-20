@@ -312,9 +312,49 @@ class Server {
             <p style="margin-top: 20px; font-size: 14px; color: #666;">
               Look for the extension icon in your browser toolbar.
             </p>
+            <button onclick="tryCloseTab()" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; margin-top: 16px; cursor: pointer;">
+              Close Tab
+            </button>
           </div>
         </div>
       \`;
+    }
+    
+    function tryCloseTab() {
+      // Try multiple methods to close the tab
+      try {
+        // Method 1: Direct close
+        window.close();
+      } catch (e) {
+        try {
+          // Method 2: Chrome extension API
+          if (typeof chrome !== 'undefined' && chrome.tabs) {
+            chrome.tabs.getCurrent((tab) => {
+              if (tab) {
+                chrome.tabs.remove(tab.id);
+              }
+            });
+          }
+        } catch (e2) {
+          try {
+            // Method 3: Navigate to about:blank
+            window.location.href = 'about:blank';
+          } catch (e3) {
+            // Method 4: Show message that user should close manually
+            document.body.innerHTML = \`
+              <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f3f4f6; font-family: system-ui;">
+                <div style="background: white; padding: 40px; border-radius: 20px; text-align: center; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                  <h2>✅ Setup Complete!</h2>
+                  <p>Please close this tab manually and use the Going Bananas extension.</p>
+                  <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                    Look for the extension icon in your browser toolbar.
+                  </p>
+                </div>
+              </div>
+            \`;
+          }
+        }
+      }
     }
 
     // Extract OAuth tokens from URL and create session
@@ -344,7 +384,7 @@ class Server {
           };
           
           // Create user session with token data
-          // We'll let the extension handle user data retrieval using the Supabase client
+          // The extension will handle user data retrieval using the Supabase client
           userSession = {
             user: {
               email: 'user@example.com', // Will be updated by extension

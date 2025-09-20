@@ -123,11 +123,28 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Trigger fade-in animation on mount
+  // Trigger fade-in animation on mount and check completion status
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 100);
+    
+    // Check if user has already completed personalization
+    const checkCompletion = async () => {
+      try {
+        const result = await chrome.storage.local.get(['personalizationCompleted', 'computedProfile']);
+        if (result.personalizationCompleted && result.computedProfile) {
+          devLog.info('User has already completed personalization', { userId });
+          onComplete?.(result.computedProfile);
+          return;
+        }
+      } catch (error) {
+        devLog.warn('Error checking completion status', { error, userId });
+        // Continue with onboarding anyway
+      }
+    };
+    
+    checkCompletion();
     return () => clearTimeout(timer);
-  }, []);
+  }, [userId, onComplete]);
 
   const steps = [
     { id: 'risk', title: 'Risk Level', description: 'How thorough should we be?' },
