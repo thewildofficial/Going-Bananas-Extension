@@ -83,6 +83,18 @@ class BackgroundService {
             return;
           }
 
+        case 'OPEN_ONBOARDING':
+          console.log('🚀 Opening onboarding flow');
+          try {
+            const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
+            await chrome.tabs.create({ url: onboardingUrl });
+            sendResponse({ success: true, message: 'Onboarding opened' });
+          } catch (error) {
+            console.log('Could not open onboarding:', error);
+            sendResponse({ success: false, message: 'Failed to open onboarding' });
+          }
+          return;
+
         case 'analyzeTermsText':
           const analysis = await this.analyzeTermsText(message.data);
           sendResponse({

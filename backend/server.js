@@ -265,8 +265,8 @@ class Server {
     <button class="button" onclick="continueSetup()" id="continue-btn">
       🚀 Continue to Setup
     </button>
-    <button class="button secondary" onclick="window.close()">
-      Close This Tab
+    <button class="button secondary" onclick="hideTab()">
+      Hide This Tab
     </button>
     
     <div id="status" style="display: none; margin-top: 20px; padding: 12px; border-radius: 8px;"></div>
@@ -287,9 +287,34 @@ class Server {
       
       if (tokensProcessed) {
         status.innerHTML = '✅ Session created! Click the Going Bananas extension icon to access your personalized dashboard.';
+        
+        // Try to open the extension popup programmatically
+        try {
+          // Send a message to the extension to open onboarding
+          window.postMessage({
+            type: 'GOING_BANANAS_OPEN_ONBOARDING'
+          }, window.location.origin);
+        } catch (e) {
+          console.log('Could not trigger extension onboarding:', e);
+        }
       } else {
         status.innerHTML = '⏳ Still processing your session. Please wait a moment and try again.';
       }
+    }
+    
+    function hideTab() {
+      // Instead of closing, just hide the content and show a message
+      document.body.innerHTML = \`
+        <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%); color: white; font-family: system-ui;">
+          <div style="background: white; color: #1a1a1a; padding: 40px; border-radius: 20px; text-align: center; max-width: 400px;">
+            <h2>✅ Setup Complete!</h2>
+            <p>You can now close this tab and use the Going Bananas extension.</p>
+            <p style="margin-top: 20px; font-size: 14px; color: #666;">
+              Look for the extension icon in your browser toolbar.
+            </p>
+          </div>
+        </div>
+      \`;
     }
 
     // Extract OAuth tokens from URL and create session
@@ -318,49 +343,19 @@ class Server {
             timestamp: Date.now()
           };
           
-          // Get user info from Supabase using the access token
-          try {
-            // Get Supabase config from backend
-            const configResponse = await fetch('/api/config/supabase');
-            const config = await configResponse.json();
-            
-            const userResponse = await fetch(config.url + '/auth/v1/user', {
-              headers: {
-                'Authorization': 'Bearer ' + access_token,
-                'apikey': config.anonKey
-              }
-            });
-            
-            if (userResponse.ok) {
-              const userData = await userResponse.json();
-              console.log('👤 User data retrieved:', userData);
-              
-              userSession = {
-                user: {
-                  email: userData.email || 'user@example.com',
-                  name: userData.user_metadata?.name || userData.user_metadata?.full_name || 'User',
-                  provider: 'google',
-                  avatar: userData.user_metadata?.avatar_url
-                },
-                timestamp: Date.now(),
-                tokens: sessionData
-              };
-            } else {
-              console.log('⚠️ User API response not ok:', userResponse.status);
-              throw new Error('User fetch failed');
-            }
-          } catch (error) {
-            console.log('⚠️ Could not fetch user data, using fallback:', error.message);
-            userSession = {
-              user: {
-                email: 'user@example.com',
-                name: 'User',
-                provider: 'google'
-              },
-              timestamp: Date.now(),
-              tokens: sessionData
-            };
-          }
+          // Create user session with token data
+          // We'll let the extension handle user data retrieval using the Supabase client
+          userSession = {
+            user: {
+              email: 'user@example.com', // Will be updated by extension
+              name: 'User', // Will be updated by extension
+              provider: 'google'
+            },
+            timestamp: Date.now(),
+            tokens: sessionData
+          };
+          
+          console.log('✅ User session created with tokens');
           
           // Store session data for extension to access
           localStorage.setItem('goingBananas_userSession', JSON.stringify(userSession));

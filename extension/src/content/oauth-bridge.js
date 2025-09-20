@@ -21,6 +21,17 @@ window.addEventListener('message', (event) => {
       console.log('✅ Session data sent to extension:', response);
     });
   }
+  
+  if (event.data.type === 'GOING_BANANAS_OPEN_ONBOARDING') {
+    console.log('🚀 Received request to open onboarding');
+    
+    // Send message to extension to open onboarding
+    chrome.runtime.sendMessage({
+      action: 'OPEN_ONBOARDING'
+    }, (response) => {
+      console.log('✅ Onboarding request sent to extension:', response);
+    });
+  }
 });
 
 // Also check for existing session data on page load

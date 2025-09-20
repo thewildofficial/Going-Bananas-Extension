@@ -7,7 +7,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { OnboardingFlow } from '@/components/personalization/OnboardingFlow';
+import { QuickSetup } from '@/components/personalization/QuickSetup';
 import { createDevLogger } from '@/utils/devLogger';
 
 const devLog = createDevLogger('onboarding-page');
@@ -111,7 +111,7 @@ async function initializeOnboarding() {
     
     const reactRoot = ReactDOM.createRoot(root);
     reactRoot.render(
-      <OnboardingFlow
+      <QuickSetup
         userId={userId}
         onComplete={handleOnboardingComplete}
         onError={handleOnboardingError}
