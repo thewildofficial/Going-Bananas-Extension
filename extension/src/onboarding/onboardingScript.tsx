@@ -113,6 +113,11 @@ async function initializeOnboarding() {
     reactRoot.render(
       <QuickSetup
         userId={userId}
+        userData={{
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar
+        }}
         onComplete={handleOnboardingComplete}
         onError={handleOnboardingError}
       />

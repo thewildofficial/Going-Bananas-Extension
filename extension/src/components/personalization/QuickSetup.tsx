@@ -13,6 +13,11 @@ const devLog = createDevLogger('quick-setup');
 
 interface QuickSetupProps {
   userId: string;
+  userData?: {
+    name?: string;
+    email?: string;
+    avatar?: string;
+  };
   onComplete?: (profile: any) => void;
   onError?: (error: string) => void;
 }
@@ -104,6 +109,7 @@ const ALERT_STYLES = [
 
 export const QuickSetup: React.FC<QuickSetupProps> = ({
   userId,
+  userData,
   onComplete,
   onError
 }) => {
@@ -115,6 +121,13 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
     alertStyle: 'helpful'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Trigger fade-in animation on mount
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoaded(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const steps = [
     { id: 'risk', title: 'Risk Level', description: 'How thorough should we be?' },
@@ -227,21 +240,41 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
   };
 
   const renderRiskStep = () => (
-    <div style={stepContainerStyle}>
+    <div style={{
+      ...stepContainerStyle,
+      opacity: isLoaded ? 1 : 0,
+      transform: isLoaded ? 'translateY(0)' : 'translateY(30px)',
+      transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+    }}>
       <div style={stepHeaderStyle}>
         <h2 style={stepTitleStyle}>How thorough should we be?</h2>
         <p style={stepDescriptionStyle}>Choose your risk analysis style</p>
       </div>
       
       <div style={optionsGridStyle}>
-        {RISK_PROFILES.map((profile) => (
+        {RISK_PROFILES.map((profile, index) => (
           <button
             key={profile.id}
             onClick={() => handleRiskSelect(profile.id as QuickSetupData['riskLevel'])}
             style={{
               ...optionCardStyle,
               borderColor: setupData.riskLevel === profile.id ? profile.color : '#e5e7eb',
-              backgroundColor: setupData.riskLevel === profile.id ? `${profile.color}10` : 'white'
+              backgroundColor: setupData.riskLevel === profile.id ? `${profile.color}10` : 'white',
+              opacity: isLoaded ? 1 : 0,
+              transform: isLoaded ? 'translateY(0)' : 'translateY(20px)',
+              transition: `all 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s`
+            }}
+            onMouseEnter={(e) => {
+              if (setupData.riskLevel !== profile.id) {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (setupData.riskLevel !== profile.id) {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.08)';
+              }
             }}
           >
             <div style={optionIconStyle}>{profile.icon}</div>
@@ -432,13 +465,24 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
   const mainContainerStyle: React.CSSProperties = {
     minHeight: '100vh',
     background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-    padding: '24px',
+    padding: '16px',
     fontFamily: 'system-ui, -apple-system, sans-serif'
   };
 
   const headerStyle: React.CSSProperties = {
     textAlign: 'center',
-    marginBottom: '32px'
+    marginBottom: '24px'
+  };
+
+  const welcomeContainerStyle: React.CSSProperties = {
+    marginTop: '8px'
+  };
+
+  const welcomeTextStyle: React.CSSProperties = {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: '4px'
   };
 
   const logoStyle: React.CSSProperties = {
@@ -488,13 +532,17 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
   };
 
   const stepContainerStyle: React.CSSProperties = {
-    maxWidth: '600px',
+    maxWidth: '900px',
     margin: '0 auto',
     background: 'white',
-    borderRadius: '16px',
-    padding: '32px',
-    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-    border: '1px solid #f1f5f9'
+    borderRadius: '20px',
+    padding: '40px',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+    border: '1px solid #f1f5f9',
+    minHeight: '500px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center'
   };
 
   const stepHeaderStyle: React.CSSProperties = {
@@ -516,39 +564,46 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
 
   const optionsGridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '16px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '24px',
+    maxWidth: '800px',
+    margin: '0 auto'
   };
 
   const optionsListStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '16px',
+    maxWidth: '600px',
+    margin: '0 auto'
   };
 
   const optionCardStyle: React.CSSProperties = {
-    padding: '24px',
+    padding: '32px',
     border: '2px solid #e5e7eb',
-    borderRadius: '12px',
+    borderRadius: '16px',
     background: 'white',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center'
+    alignItems: 'center',
+    minHeight: '200px',
+    justifyContent: 'center'
   };
 
   const optionListItemStyle: React.CSSProperties = {
-    padding: '20px',
+    padding: '24px',
     border: '2px solid #e5e7eb',
-    borderRadius: '12px',
+    borderRadius: '16px',
     background: 'white',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     display: 'flex',
     alignItems: 'center',
-    gap: '16px'
+    gap: '20px',
+    minHeight: '80px'
   };
 
   const optionIconStyle: React.CSSProperties = {
@@ -582,23 +637,27 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
 
   const focusGridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-    gap: '12px',
-    marginBottom: '24px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '16px',
+    marginBottom: '32px',
+    maxWidth: '800px',
+    margin: '0 auto 32px auto'
   };
 
   const focusCardStyle: React.CSSProperties = {
-    padding: '16px',
+    padding: '20px',
     border: '2px solid #e5e7eb',
-    borderRadius: '10px',
+    borderRadius: '12px',
     background: 'white',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     textAlign: 'center',
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center'
+    alignItems: 'center',
+    minHeight: '120px',
+    justifyContent: 'center'
   };
 
   const focusIconStyle: React.CSSProperties = {
@@ -771,7 +830,12 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
   };
 
   return (
-    <div style={mainContainerStyle}>
+    <div style={{
+      ...mainContainerStyle,
+      opacity: isLoaded ? 1 : 0,
+      transform: isLoaded ? 'translateY(0)' : 'translateY(20px)',
+      transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+    }}>
       <div style={headerStyle}>
         <div style={logoStyle}>
           <div style={logoIconStyle}>
@@ -779,7 +843,12 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
           </div>
           <h1 style={titleStyle}>Quick Setup</h1>
         </div>
-        <p style={subtitleStyle}>Let's personalize Going Bananas in 2 minutes</p>
+        <div style={welcomeContainerStyle}>
+          <p style={welcomeTextStyle}>
+            Welcome{userData?.name ? `, ${userData.name}` : ''}! 
+          </p>
+          <p style={subtitleStyle}>Let's personalize Going Bananas in 2 minutes</p>
+        </div>
       </div>
 
       <div style={progressStyle}>
