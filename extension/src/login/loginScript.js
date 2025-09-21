@@ -280,7 +280,7 @@ async function handleDirectOAuthRedirect() {
       }
       
       // Create Chrome extension tab with the tokens
-      const extensionId = 'YOUR_EXTENSION_ID'; // This would be dynamically determined
+      const extensionId = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) ? chrome.runtime.id : 'YOUR_EXTENSION_ID';
       const onboardingUrl = `chrome-extension://${extensionId}/onboarding/onboarding.html`;
       
       // Store tokens in a way that can be accessed by the extension
