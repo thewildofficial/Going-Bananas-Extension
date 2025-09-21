@@ -13,7 +13,7 @@ interface AnalysisData {
 }
 
 class BackgroundService {
-  private mockApiUrl = 'http://localhost:3001/api';
+  private mockApiUrl = 'http://localhost:3000/api';
   
 
   constructor() {
@@ -37,8 +37,9 @@ class BackgroundService {
 
   private handleInstallation(details: chrome.runtime.InstalledDetails): void {
     if (details.reason === 'install') {
+      // Open login page instead of options page
       chrome.tabs.create({
-        url: chrome.runtime.getURL('options/options.html')
+        url: chrome.runtime.getURL('login/login.html')
       });
     }
   }
@@ -50,6 +51,50 @@ class BackgroundService {
   ): Promise<void> {
     try {
       switch (message.action) {
+        case 'OAUTH_SESSION_CREATED':
+        case 'OAUTH_SESSION_FOUND':
+          console.log('🎉 Processing OAuth session data');
+          const sessionData = (message as any).sessionData;
+          
+          if (sessionData && sessionData.user) {
+            // Check if user has already completed personalization
+            const existingData = await chrome.storage.local.get(['personalizationCompleted']);
+            const needsOnboarding = !existingData.personalizationCompleted;
+            
+            // Store session in Chrome extension storage
+            await chrome.storage.local.set({
+              session: {
+                user: sessionData.user,
+                timestamp: Date.now()
+              },
+              tokens: sessionData.tokens,
+              needsOnboarding: needsOnboarding
+            });
+            
+            console.log('✅ OAuth session stored in extension', { needsOnboarding });
+            sendResponse({ success: true, message: 'Session stored', needsOnboarding });
+            
+            // Don't auto-open onboarding - let the login page handle the flow
+            // The login page will redirect to onboarding in the same tab if needed
+            
+            return;
+          } else {
+            sendResponse({ success: false, message: 'Invalid session data' });
+            return;
+          }
+
+        case 'OPEN_ONBOARDING':
+          console.log('🚀 Opening onboarding flow');
+          try {
+            const onboardingUrl = chrome.runtime.getURL('onboarding/onboarding.html');
+            await chrome.tabs.create({ url: onboardingUrl });
+            sendResponse({ success: true, message: 'Onboarding opened' });
+          } catch (error) {
+            console.log('Could not open onboarding:', error);
+            sendResponse({ success: false, message: 'Failed to open onboarding' });
+          }
+          return;
+
         case 'analyzeTermsText':
           const analysis = await this.analyzeTermsText(message.data);
           sendResponse({
@@ -92,6 +137,14 @@ class BackgroundService {
               error: 'URL required'
             });
           }
+          break;
+
+        case 'ping':
+          // Respond to ping messages from content scripts
+          sendResponse({
+            success: true,
+            message: 'pong'
+          });
           break;
 
         default:
@@ -267,12 +320,38 @@ class BackgroundService {
 
   private async getCachedAnalysis(url: string): Promise<any> {
     try {
+      // First check local cache
       const cacheKey = `analysis_${this.hashUrl(url)}`;
       const result = await chrome.storage.local.get(cacheKey);
       const cached = result[cacheKey];
       
       if (cached && Date.now() - cached.timestamp < 24 * 60 * 60 * 1000) {
         return cached.data;
+      }
+      
+      // If not found locally, check server-side cache
+      try {
+        const session = await chrome.storage.local.get(['session']);
+        if (session.session?.user?.email) {
+          const userId = session.session.user.email;
+          const response = await fetch(`${this.mockApiUrl}/personalization/cached-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, url })
+          });
+          
+          if (response.ok) {
+            const serverCached = await response.json();
+            if (serverCached.success && serverCached.analysis) {
+              console.log('📦 Using server-side cached analysis for:', url);
+              // Cache locally for future use
+              await this.cacheAnalysis(url, serverCached.analysis);
+              return serverCached.analysis;
+            }
+          }
+        }
+      } catch (serverError) {
+        console.log('Server cache check failed, continuing with local cache only:', serverError);
       }
     } catch (error) {
       console.error('Failed to get cached analysis:', error);
@@ -282,6 +361,7 @@ class BackgroundService {
 
   private async cacheAnalysis(url: string, analysis: any): Promise<void> {
     try {
+      // Cache locally
       const cacheKey = `analysis_${this.hashUrl(url)}`;
       await chrome.storage.local.set({
         [cacheKey]: {
@@ -290,6 +370,22 @@ class BackgroundService {
           url: url
         }
       });
+      
+      // Also cache server-side for persistence across reinstalls
+      try {
+        const session = await chrome.storage.local.get(['session']);
+        if (session.session?.user?.email) {
+          const userId = session.session.user.email;
+          await fetch(`${this.mockApiUrl}/personalization/cache-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, url, analysis })
+          });
+          console.log('📦 Analysis cached server-side for:', url);
+        }
+      } catch (serverError) {
+        console.log('Server cache save failed, but local cache succeeded:', serverError);
+      }
     } catch (error) {
       console.error('Failed to cache analysis:', error);
     }

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Going Bananas Extension - Setup</title>
+  <meta name="description" content="Personalize your Terms & Conditions analysis experience." />
+  <style>
+    :root {
+      --bg: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+      --card-bg: #ffffff;
+      --border: #e9ecef;
+      --text: #1a1a1a;
+      --muted: #4a5568;
+      --accent: #ff6b95;
+      --accent-2: #ff9a56;
+      --danger: #ef4444;
+      --shadow: 0 8px 32px rgba(0,0,0,0.12);
+      --radius-xl: 16px;
+      --radius-2xl: 20px;
+      --focus: 0 0 0 3px rgba(255,107,149,.35);
+    }
+    
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    #root {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Loading state */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: var(--bg);
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 24px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .loading-subtext {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      text-align: center;
+      max-width: 300px;
+    }
+
+    /* Error state */
+    .error-container {
+      max-width: 400px;
+      margin: 0 auto;
+      padding: 32px;
+      background: white;
+      border-radius: var(--radius-2xl);
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .error-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      background: #fee2e2;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .error-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .error-message {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    .retry-button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .retry-button:hover {
+      background: #e55b8a;
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <!-- Loading state shown by default -->
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Setting up your personalized experience</div>
+      <div class="loading-subtext">
+        We're preparing a customized Terms & Conditions analysis just for you...
+      </div>
+    </div>
+  </div>
+
+  <!-- Error template (hidden by default, shown via JavaScript if needed) -->
+  <template id="error-template">
+    <div class="error-container">
+      <div class="error-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 9v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="error-title">Setup Failed</div>
+      <div class="error-message">
+        There was a problem loading the personalization setup. Please check your connection and try again.
+      </div>
+      <button class="retry-button" onclick="window.location.reload()">
+        Try Again
+      </button>
+    </div>
+  </template>
+
+  <!-- Script will be injected by HtmlWebpackPlugin for chunk 'onboarding' -->
+</body>
+</html>

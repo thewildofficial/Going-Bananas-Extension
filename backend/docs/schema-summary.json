@@ -1,0 +1,22 @@
+{
+  "timestamp": "2025-09-21T09:43:57.654Z",
+  "tables": [
+    "analyses_generic",
+    "analyses_personalized",
+    "analysis_history",
+    "documents",
+    "user_preferences",
+    "user_profiles"
+  ],
+  "views": [
+    "user_dashboard"
+  ],
+  "functions": [
+    "get_user_stats"
+  ],
+  "notes": [
+    "Schema inspection completed using direct table queries",
+    "TypeScript types are available in types/supabase.ts",
+    "All tables are accessible via Supabase client"
+  ]
+}

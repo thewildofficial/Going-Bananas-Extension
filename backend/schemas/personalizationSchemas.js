@@ -309,8 +309,10 @@ const contextualFactorsSchema = Joi.object({
  * Combines all personalization components into a comprehensive user profile
  */
 const userPersonalizationSchema = Joi.object({
-  userId: Joi.string().uuid().required()
-    .description('Unique user identifier'),
+  userId: Joi.alternatives().try(
+    Joi.string().uuid(),
+    Joi.string().email()
+  ).required().description('Unique user identifier (UUID or email)'),
   
   version: Joi.string().valid('1.0').default('1.0')
     .description('Schema version for migration compatibility'),
@@ -370,7 +372,10 @@ const userPersonalizationSchema = Joi.object({
  * Allows updating specific sections without requiring complete re-submission
  */
 const quizUpdateSchema = Joi.object({
-  userId: Joi.string().uuid().required(),
+  userId: Joi.alternatives().try(
+    Joi.string().uuid(),
+    Joi.string().email()
+  ).required(),
   section: Joi.string().valid(
     'demographics',
     'digitalBehavior', 

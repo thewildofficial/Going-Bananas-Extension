@@ -1,0 +1,283 @@
+/* Content Script Styles for Going Bananas T&C Analyzer */
+
+#banana-analysis-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 999999;
+  pointer-events: none;
+  animation: slideInRight 0.3s ease-out;
+}
+body.going-bananas-block-selector-active #banana-analysis-indicator { top: 80px; }
+
+.banana-indicator-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+  color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.banana-icon {
+  font-size: 18px;
+  animation: bounce 2s infinite;
+}
+
+.banana-text {
+  white-space: nowrap;
+}
+
+/* Animations */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+  60% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Highlight styles for terms detection */
+.banana-terms-highlight {
+  background: linear-gradient(120deg, #a8edea 0%, #fed6e3 100%) !important;
+  padding: 2px 4px !important;
+  border-radius: 3px !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+}
+
+.banana-terms-highlight:hover {
+  background: linear-gradient(120deg, #fed6e3 0%, #a8edea 100%) !important;
+  transform: scale(1.02) !important;
+}
+
+/* Terms detection overlay */
+.banana-terms-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.1);
+  z-index: 999998;
+  pointer-events: none;
+  backdrop-filter: blur(1px);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Privacy-focused terms highlighting */
+.banana-privacy-term {
+  background: rgba(255, 107, 149, 0.2) !important;
+  border-bottom: 2px solid #ff6b95 !important;
+}
+
+.banana-liability-term {
+  background: rgba(255, 167, 38, 0.2) !important;
+  border-bottom: 2px solid #ffa726 !important;
+}
+
+.banana-data-term {
+  background: rgba(103, 126, 234, 0.2) !important;
+  border-bottom: 2px solid #677eea !important;
+}
+
+/* Tooltip styles for highlighted terms */
+.banana-tooltip {
+  position: absolute;
+  background: #333;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1000000;
+  pointer-events: none;
+  max-width: 200px;
+  line-height: 1.4;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all 0.2s ease;
+}
+
+.banana-tooltip.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.banana-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #333;
+}
+
+/* Floating action button for quick analysis */
+.banana-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 100%);
+  border: none;
+  box-shadow: 0 4px 20px rgba(255, 107, 149, 0.4);
+  cursor: pointer;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.3s ease;
+  opacity: 0;
+  transform: scale(0);
+}
+
+.banana-fab.show {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.banana-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 25px rgba(255, 107, 149, 0.6);
+}
+
+.banana-fab:active {
+  transform: scale(0.95);
+}
+
+/* Progress indicator */
+.banana-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  z-index: 999999;
+  overflow: hidden;
+}
+body.going-bananas-block-selector-active .banana-progress { top: 60px; }
+
+.banana-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #ff9a56, #ff6b95, #667eea);
+  width: 0%;
+  transition: width 0.3s ease;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  #banana-analysis-indicator {
+    top: 10px;
+    right: 10px;
+  }
+  
+  .banana-indicator-content {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  
+  .banana-fab {
+    bottom: 10px;
+    right: 10px;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+  
+  .banana-tooltip {
+    max-width: 150px;
+    font-size: 11px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .banana-indicator-content {
+    background: #000;
+    border: 2px solid #fff;
+  }
+  
+  .banana-terms-highlight {
+    background: yellow !important;
+    color: black !important;
+  }
+  
+  .banana-fab {
+    background: #000;
+    border: 2px solid #fff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  #banana-analysis-indicator,
+  .banana-fab,
+  .banana-tooltip {
+    animation: none;
+    transition: none;
+  }
+  
+  .banana-icon {
+    animation: none;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .banana-tooltip {
+    background: #1a1a1a;
+    border: 1px solid #333;
+  }
+  
+  .banana-tooltip::after {
+    border-top-color: #1a1a1a;
+  }
+}

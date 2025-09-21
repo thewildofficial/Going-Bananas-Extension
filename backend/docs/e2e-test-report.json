@@ -1,0 +1,112 @@
+{
+  "timestamp": "2025-09-21T09:50:13.465Z",
+  "summary": {
+    "totalTests": 11,
+    "successRate": 100,
+    "averageResponseTime": 341.76666666666665
+  },
+  "detailedResults": {
+    "apiEndpoints": {
+      "profileCreation": {
+        "success": true,
+        "timeMs": 758,
+        "dataSize": 262
+      },
+      "profileRetrieval": {
+        "success": true,
+        "timeMs": 314,
+        "dataSize": 404
+      },
+      "analysisCaching": {
+        "success": true,
+        "timeMs": 327,
+        "dataSize": 193
+      },
+      "cacheRetrieval": {
+        "success": true,
+        "timeMs": 319,
+        "cacheHit": true
+      },
+      "analysisHistory": {
+        "success": true,
+        "timeMs": 327
+      }
+    },
+    "caching": {
+      "writePerformance": {
+        "averageTimeMs": 324,
+        "minTimeMs": 320,
+        "maxTimeMs": 329,
+        "totalWrites": 3
+      },
+      "readPerformance": {
+        "averageTimeMs": 316.6666666666667,
+        "minTimeMs": 314,
+        "maxTimeMs": 320,
+        "totalReads": 3
+      },
+      "hitRateAnalysis": {
+        "hitRate": 0,
+        "totalTests": 10,
+        "averageMissTimeMs": 341
+      }
+    },
+    "personalization": {
+      "computationPerformance": {
+        "timeMs": 1,
+        "profileTags": 13,
+        "riskTolerance": 5.9,
+        "explanationStyle": "technical_efficient"
+      },
+      "updateEfficiency": {
+        "timeMs": 410,
+        "operation": "section_update"
+      },
+      "retrievalEfficiency": {
+        "timeMs": 321,
+        "dataSize": 400,
+        "hasComputedProfile": false
+      }
+    },
+    "performance": {},
+    "optimizations": {
+      "inefficiencies": [
+        {
+          "operation": "cache_hit_rate",
+          "issue": "Low cache hit rate",
+          "hitRate": 0,
+          "recommendation": "Review cache key strategy and TTL settings"
+        }
+      ],
+      "optimizations": [
+        {
+          "type": "caching",
+          "description": "Implement Redis for frequently accessed data",
+          "impact": "High",
+          "effort": "Medium"
+        },
+        {
+          "type": "database",
+          "description": "Add database indexes for user_id and content_hash",
+          "impact": "Medium",
+          "effort": "Low"
+        },
+        {
+          "type": "api",
+          "description": "Implement request batching for multiple operations",
+          "impact": "Medium",
+          "effort": "Medium"
+        }
+      ],
+      "recommendations": []
+    }
+  },
+  "recommendations": [
+    {
+      "category": "Database",
+      "priority": "Low",
+      "description": "Consider adding database indexes for better query performance.",
+      "action": "Add indexes on user_id, content_hash, and created_at columns"
+    }
+  ]
+}
