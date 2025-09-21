@@ -1,6 +1,6 @@
 // Options Page Component
 import React, { useState, useEffect } from 'react';
-import { getSettings, saveSettings } from '@/utils/chrome';
+import { getSettings, saveSettings, hasApiKey, clearApiKey } from '@/utils/chrome';
 import { ExtensionSettings } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -848,11 +848,35 @@ export const Options: React.FC = () => {
           ) : (
             <section style={settingsSectionStyle}>
               <h2 style={sectionTitleStyle}>Analysis Configuration</h2>
+              
+              <div style={{
+                background: '#f0f9ff',
+                border: '1px solid #0ea5e9',
+                borderRadius: '8px',
+                padding: '16px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ margin: '0 0 8px 0', color: '#0c4a6e', fontSize: '14px', fontWeight: '600' }}>
+                  🔒 Security Information
+                </h3>
+                <p style={{ margin: '0', color: '#0c4a6e', fontSize: '12px', lineHeight: '1.4' }}>
+                  Your API key is encrypted using AES-GCM encryption with a device-specific key. 
+                  It's stored locally and never transmitted to our servers. 
+                  The key is derived from your browser's unique characteristics, making it 
+                  impossible to decrypt on other devices.
+                </p>
+              </div>
             
             <div style={settingItemStyle}>
               <div style={settingInfoStyle}>
                 <label style={settingLabelStyle}>Gemini API Key</label>
-                <p style={settingDescriptionStyle}>Your Google AI Studio API key for Gemini (required for production)</p>
+                <p style={settingDescriptionStyle}>
+                  Your Google AI Studio API key for Gemini (required for production)
+                  <br />
+                  <span style={{ color: '#10b981', fontSize: '12px', fontWeight: '500' }}>
+                    🔒 Securely encrypted and stored locally
+                  </span>
+                </p>
               </div>
               <div style={settingControlStyle}>
                 <input 
@@ -869,6 +893,24 @@ export const Options: React.FC = () => {
                 >
                   {showApiKey ? '🙈' : '👁️'}
                 </button>
+                {settings.apiKey && (
+                  <button 
+                    type="button" 
+                    style={{
+                      ...btnIconStyle,
+                      backgroundColor: '#ef4444',
+                      color: 'white',
+                      marginLeft: '8px'
+                    }}
+                    onClick={async () => {
+                      await clearApiKey();
+                      setSettings({...settings, apiKey: ''});
+                    }}
+                    title="Clear API key"
+                  >
+                    🗑️
+                  </button>
+                )}
               </div>
             </div>
 

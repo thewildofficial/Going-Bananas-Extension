@@ -15,26 +15,16 @@
 
 const logger = require('../utils/logger');
 const { userPersonalizationSchema, quizUpdateSchema } = require('../schemas/personalizationSchemas');
-const mongoose = require('mongoose');
-const UserProfile = require('../models/userProfile');
+const SupabasePersonalizationService = require('./supabasePersonalizationService');
 
 class PersonalizationService {
   constructor() {
     this.computationWeights = this.initializeComputationWeights();
-    this.profiles = new Map(); // In-memory storage for testing
-    // if (process.env.NODE_ENV !== 'test') {
-    //   this.connectDB();
-    // }
+    this.supabaseService = new SupabasePersonalizationService();
+    logger.info('Personalization service initialized with Supabase backend');
   }
 
-  async connectDB() {
-    try {
-      await mongoose.connect(process.env.MONGODB_URI);
-      logger.info('MongoDB connected successfully');
-    } catch (error) {
-      logger.error('MongoDB connection failed:', error.message);
-    }
-  }
+  // MongoDB connection removed - using Supabase instead
 
   /**
    * Initialize weights and factors used in profile computation
@@ -123,17 +113,8 @@ class PersonalizationService {
         lastUpdated: new Date().toISOString()
       };
 
-      let savedProfile;
-
-      // Store the profile based on environment
-      if (process.env.NODE_ENV === 'test') {
-        // Use in-memory storage for testing
-        savedProfile = { ...completeProfile };
-        this.profiles.set(completeProfile.userId, savedProfile);
-      } else {
-        // Use MongoDB for production
-        savedProfile = await UserProfile.create(completeProfile);
-      }
+      // Save profile to Supabase
+      const savedProfile = await this.supabaseService.saveProfile(completeProfile);
 
       logger.info('User profile saved successfully:', {
         userId: savedProfile.userId,
@@ -170,23 +151,17 @@ class PersonalizationService {
 
       const { userId, section, data, recomputeProfile } = validatedUpdate;
 
-      // Retrieve existing profile
-      const existingProfile = await UserProfile.findOne({ userId: userId });
+      // Retrieve existing profile from Supabase
+      const existingProfile = await this.supabaseService.getProfile(userId);
       if (!existingProfile) {
         throw new Error(`User profile not found: ${userId}`);
       }
 
       // Update the specified section
-      existingProfile[section] = { ...existingProfile[section], ...data };
-      existingProfile.lastUpdated = new Date().toISOString();
+      const updatedData = { ...existingProfile[section], ...data };
 
-      // Recompute derived parameters if requested
-      if (recomputeProfile) {
-        existingProfile.computedProfile = await this.computeProfileParameters(existingProfile);
-      }
-
-      // Save updated profile
-      const updatedProfile = await existingProfile.save();
+      // Use Supabase service to update the profile section
+      const updatedProfile = await this.supabaseService.updateProfileSection(userId, section, updatedData);
 
       logger.info('Profile section updated:', {
         userId: userId,
@@ -215,20 +190,17 @@ class PersonalizationService {
    */
   async getUserProfile(userId) {
     try {
-      let profile;
-
-      if (process.env.NODE_ENV === 'test') {
-        // Use in-memory storage for testing
-        profile = this.profiles.get(userId);
-      } else {
-        // Use MongoDB for production
-        profile = await UserProfile.findOne({ userId: userId });
-      }
-
+      logger.info('Retrieving user profile from Supabase', { userId });
+      
+      // Get user profile from Supabase
+      const profile = await this.supabaseService.getProfile(userId);
+      
       if (!profile) {
         logger.warn('Profile not found for user:', { userId });
         return null;
       }
+      
+      logger.info('User profile retrieved successfully', { userId });
       return profile;
     } catch (error) {
       logger.error('Failed to retrieve user profile:', {
@@ -743,22 +715,12 @@ class PersonalizationService {
 
   async deleteUserProfile(userId) {
     try {
-      let result;
-
-      if (process.env.NODE_ENV === 'test') {
-        // Use in-memory storage for testing
-        result = this.profiles.delete(userId);
-        if (!result) {
-          logger.warn('Profile not found for deletion:', { userId });
-          return false;
-        }
-      } else {
-        // Use MongoDB for production
-        result = await UserProfile.deleteOne({ userId: userId });
-        if (result.deletedCount === 0) {
-          logger.warn('Profile not found for deletion:', { userId });
-          return false;
-        }
+      // Use Supabase service to delete user data
+      const result = await this.supabaseService.deleteUserData(userId);
+      
+      if (!result) {
+        logger.warn('Profile not found for deletion:', { userId });
+        return false;
       }
 
       logger.info('User profile deleted successfully:', { userId });

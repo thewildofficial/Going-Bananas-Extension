@@ -130,12 +130,35 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
     // Check if user has already completed personalization
     const checkCompletion = async () => {
       try {
-        const result = await chrome.storage.local.get(['personalizationCompleted', 'computedProfile']);
-        if (result.personalizationCompleted && result.computedProfile) {
-          devLog.info('User has already completed personalization', { userId });
-          onComplete?.(result.computedProfile);
+        // First check local storage
+        const localResult = await chrome.storage.local.get(['personalizationCompleted', 'computedProfile']);
+        if (localResult.personalizationCompleted && localResult.computedProfile) {
+          devLog.info('User has already completed personalization (local)', { userId });
+          onComplete?.(localResult.computedProfile);
           return;
         }
+        
+        // If not found locally, check server-side storage
+        devLog.info('Checking server-side personalization status', { userId });
+        const { personalizationService } = await import('@/services/personalizationService');
+        const hasCompleted = await personalizationService.hasCompletedPersonalization(userId);
+        
+        if (hasCompleted) {
+          devLog.info('User has completed personalization on server', { userId });
+          const profile = await personalizationService.getProfile(userId);
+          if (profile) {
+            // Cache the profile locally for future use
+            await chrome.storage.local.set({
+              personalizationCompleted: true,
+              computedProfile: profile.computedProfile,
+              personalizationCompletedAt: profile.completed_at
+            });
+            onComplete?.(profile);
+            return;
+          }
+        }
+        
+        devLog.info('User needs to complete personalization', { userId });
       } catch (error) {
         devLog.warn('Error checking completion status', { error, userId });
         // Continue with onboarding anyway
@@ -232,18 +255,30 @@ export const QuickSetup: React.FC<QuickSetupProps> = ({
       };
 
       // Store in Chrome storage
+      const computedProfile = {
+        profileTags: [setupData.riskLevel, setupData.techLevel, ...setupData.focusAreas],
+        riskLevel: setupData.riskLevel,
+        techLevel: setupData.techLevel,
+        focusAreas: setupData.focusAreas,
+        alertStyle: setupData.alertStyle
+      };
+      
       await chrome.storage.local.set({
         personalizationCompleted: true,
         personalizationCompletedAt: new Date().toISOString(),
         quickSetupData: setupData,
-        computedProfile: {
-          profileTags: [setupData.riskLevel, setupData.techLevel, ...setupData.focusAreas],
-          riskLevel: setupData.riskLevel,
-          techLevel: setupData.techLevel,
-          focusAreas: setupData.focusAreas,
-          alertStyle: setupData.alertStyle
-        }
+        computedProfile: computedProfile
       });
+      
+      // Also save to server-side storage for persistence across reinstalls
+      try {
+        const { personalizationService } = await import('@/services/personalizationService');
+        await personalizationService.submitProfile(profile);
+        devLog.info('Profile saved to server-side storage', { userId });
+      } catch (serverError) {
+        devLog.warn('Failed to save profile to server, but local storage succeeded', { error: serverError });
+        // Don't fail the whole process if server save fails
+      }
 
       devLog.info('Quick setup completed successfully');
       onComplete?.(profile);

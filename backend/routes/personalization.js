@@ -15,11 +15,13 @@
 const express = require('express');
 const Joi = require('joi');
 const PersonalizationService = require('../services/personalizationService');
+const SupabasePersonalizationService = require('../services/supabasePersonalizationService');
 const { userPersonalizationSchema, quizUpdateSchema } = require('../schemas/personalizationSchemas');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 const personalizationService = new PersonalizationService();
+const supabaseService = new SupabasePersonalizationService();
 
 /**
  * POST /api/personalization/profile
@@ -813,5 +815,82 @@ function calculateAverage(profiles, path) {
   
   return values.length > 0 ? values.reduce((sum, val) => sum + val, 0) / values.length : 0;
 }
+
+/**
+ * POST /api/personalization/cache-analysis
+ * Cache analysis results for future use
+ */
+router.post('/cache-analysis', async (req, res) => {
+  try {
+    const { userId, url, analysis } = req.body;
+
+    if (!userId || !url || !analysis) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId, url, analysis'
+      });
+    }
+
+    logger.info('Caching analysis result', { userId, url });
+
+    const result = await supabaseService.saveAnalysis(userId, url, analysis);
+
+    res.json({
+      success: true,
+      message: 'Analysis cached successfully',
+      data: result
+    });
+
+  } catch (error) {
+    logger.error('Failed to cache analysis:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cache analysis',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/personalization/cached-analysis
+ * Retrieve cached analysis results
+ */
+router.post('/cached-analysis', async (req, res) => {
+  try {
+    const { userId, url } = req.body;
+
+    if (!userId || !url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId, url'
+      });
+    }
+
+    logger.info('Retrieving cached analysis', { userId, url });
+
+    const cachedAnalysis = await supabaseService.getCachedAnalysis(userId, url);
+
+    if (cachedAnalysis) {
+      res.json({
+        success: true,
+        analysis: cachedAnalysis.analysis_data,
+        cached_at: cachedAnalysis.created_at
+      });
+    } else {
+      res.json({
+        success: false,
+        message: 'No cached analysis found'
+      });
+    }
+
+  } catch (error) {
+    logger.error('Failed to retrieve cached analysis:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve cached analysis',
+      message: error.message
+    });
+  }
+});
 
 module.exports = router;

@@ -320,12 +320,38 @@ class BackgroundService {
 
   private async getCachedAnalysis(url: string): Promise<any> {
     try {
+      // First check local cache
       const cacheKey = `analysis_${this.hashUrl(url)}`;
       const result = await chrome.storage.local.get(cacheKey);
       const cached = result[cacheKey];
       
       if (cached && Date.now() - cached.timestamp < 24 * 60 * 60 * 1000) {
         return cached.data;
+      }
+      
+      // If not found locally, check server-side cache
+      try {
+        const session = await chrome.storage.local.get(['session']);
+        if (session.session?.user?.email) {
+          const userId = session.session.user.email;
+          const response = await fetch(`${this.mockApiUrl}/personalization/cached-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, url })
+          });
+          
+          if (response.ok) {
+            const serverCached = await response.json();
+            if (serverCached.success && serverCached.analysis) {
+              console.log('📦 Using server-side cached analysis for:', url);
+              // Cache locally for future use
+              await this.cacheAnalysis(url, serverCached.analysis);
+              return serverCached.analysis;
+            }
+          }
+        }
+      } catch (serverError) {
+        console.log('Server cache check failed, continuing with local cache only:', serverError);
       }
     } catch (error) {
       console.error('Failed to get cached analysis:', error);
@@ -335,6 +361,7 @@ class BackgroundService {
 
   private async cacheAnalysis(url: string, analysis: any): Promise<void> {
     try {
+      // Cache locally
       const cacheKey = `analysis_${this.hashUrl(url)}`;
       await chrome.storage.local.set({
         [cacheKey]: {
@@ -343,6 +370,22 @@ class BackgroundService {
           url: url
         }
       });
+      
+      // Also cache server-side for persistence across reinstalls
+      try {
+        const session = await chrome.storage.local.get(['session']);
+        if (session.session?.user?.email) {
+          const userId = session.session.user.email;
+          await fetch(`${this.mockApiUrl}/personalization/cache-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, url, analysis })
+          });
+          console.log('📦 Analysis cached server-side for:', url);
+        }
+      } catch (serverError) {
+        console.log('Server cache save failed, but local cache succeeded:', serverError);
+      }
     } catch (error) {
       console.error('Failed to cache analysis:', error);
     }
